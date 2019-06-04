@@ -4,7 +4,23 @@
     "description": "A file system database to simulate database recovery algorithms",
     "license": "ISC",
     "main": "public/index.html",
+    "devDependencies": {
+        "@types/node": "12.0.4",
+        "@types/react": "16.8.19",
+        "@types/react-dom": "16.8.4",
+        "parcel-bundler": "1.12.3",
+        "prettier": "1.17.1",
+        "tslint": "5.17.0",
+        "tslint-config-prettier": "1.18.0",
+        "typescript": "3.5.1"
+    },
+    "dependencies": {
+        "@babel/polyfill": "7.4.4",
+        "react": "16.8.6",
+        "react-dom": "16.8.6"
+    },
     "scripts": {
-        "test": "echo \"Error: no test specified\" && exit 1"
+        "format": "shopt -s extglob globstar && tslint -c ./tslint.json -p ./package.json && prettier --config ./.prettierrc.js -c --write ./src/**/*.ts* && shopt -u extglob globstar",
+        "start": "parcel serve --no-cache -d ./dist/ -p 8000 -- \"$npm_package_main\""
     }
 }
