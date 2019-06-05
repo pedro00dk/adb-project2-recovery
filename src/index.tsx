@@ -1,7 +1,10 @@
 // required for parcel to generate target > ES5 builds
 import '@babel/polyfill'
 
+import 'bootstrap/dist/css/bootstrap'
+
 import * as React from 'react'
 import * as ReactDom from 'react-dom'
+import { App } from './App'
 
-ReactDom.render(<div>hello world!</div>, document.getElementById('root'))
+ReactDom.render(<App />, document.getElementById('root'))
