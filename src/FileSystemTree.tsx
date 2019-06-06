@@ -19,12 +19,16 @@ const nodeIsFile = (node: File | Folder): node is File => {
     return !!(node as File).content
 }
 
-const getPathString = (path: Path) => {
-    return `${path.map(part => part.name).join('/')}${path.length > 0 && nodeIsFile(path[path.length - 1]) ? '' : '/'}`
+const getPathString = (path: Path, prefix?: string) => {
+    const pathPrefix = prefix != undefined ? `${prefix}:` : ''
+    const basePath = path.map(part => part.name).join('/')
+    const folderSlash = path.length > 0 && nodeIsFile(path[path.length - 1]) ? '' : '/'
+    return `${pathPrefix}${basePath}${folderSlash}`
 }
 
 export function FileSystemTree(props: {
     fs: Folder
+    fsPrefix?: string
     onClick?: (path: Path) => void
     onLoad?: (path: Path) => void
     onCreate?: (path: Path, type: 'file' | 'folder') => void
@@ -32,21 +36,25 @@ export function FileSystemTree(props: {
     onRename?: (path: Path, name: string) => void
 }) {
     return (
+        <div  className='d-flex overflow-auto p-1 w-100 h-100'>
         <ul className='pl-0' style={{ listStyleType: 'none' }}>
             <FileSystemNode
                 path={[props.fs]}
+                fsPrefix={props.fsPrefix}
                 onClick={props.onClick}
                 onLoad={props.onLoad}
                 onCreate={props.onCreate}
                 onDelete={props.onDelete}
                 onRename={props.onRename}
-            />
+                />
         </ul>
+                </div>
     )
 }
 
 function FileSystemNode(props: {
     path: (File | Folder)[]
+    fsPrefix?: string
     onClick?: (path: Path) => void
     onLoad?: (path: Path) => void
     onCreate?: (path: Path, type: 'file' | 'folder') => void
@@ -56,7 +64,7 @@ function FileSystemNode(props: {
     const [rename, setRename] = React.useState(false)
     const current = props.path[props.path.length - 1]
     const isFile = nodeIsFile(current)
-    const pathString = getPathString(props.path)
+    const pathString = getPathString(props.path, props.fsPrefix)
 
     return (
         <li>
@@ -96,8 +104,9 @@ function FileSystemNode(props: {
                         const childPath = [...props.path, child]
                         return (
                             <FileSystemNode
-                                key={getPathString(childPath)}
+                                key={getPathString(childPath, props.fsPrefix)}
                                 path={childPath}
+                                fsPrefix={props.fsPrefix}
                                 onClick={props.onClick}
                                 onLoad={props.onLoad}
                                 onCreate={props.onCreate}
