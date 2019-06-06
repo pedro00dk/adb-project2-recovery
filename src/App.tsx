@@ -1,5 +1,6 @@
 import * as React from 'react'
 import { FileSystemTree, Folder } from './FileSystemTree'
+import { Journal } from './Journal';
 
 const mock: Folder = {
     name: 'home',
@@ -57,6 +58,7 @@ export function App() {
                     </div>
                     <div className='d-flex flex-column flex-fill'>
                         <h6 className='text-center p-1 mb-1 w-100'>Journal</h6>
+                        <Journal />
                     </div>
                 </div>
                 <div className='d-flex flex-column align-items-center shadow w-25 m-2'>
@@ -73,6 +75,7 @@ export function App() {
                     </div>
                     <div className='d-flex flex-column flex-fill'>
                         <h6 className='text-center p-1 mb-1 w-100'>Journal</h6>
+                        {/* <Journal /> */}
                     </div>
                 </div>
                 <div className='d-flex flex-column flex-fill align-items-center shadow m-2'>
