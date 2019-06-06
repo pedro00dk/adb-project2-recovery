@@ -142,8 +142,8 @@ export function JournalTable(props: { journal?: Journal }) {
                 </tr>
             </thead>
             <tbody className='d-flex flex-column'>
-                {journal.map(log => (
-                    <tr className={'d-flex ' + logDecorations[log.operation]}>
+                {journal.map((log, i) => (
+                    <tr key={i} className={'d-flex ' + logDecorations[log.operation]}>
                         <th className='text-truncate' style={{ width: '12%' }} title={log.transaction}>
                             {log.transaction}
                         </th>

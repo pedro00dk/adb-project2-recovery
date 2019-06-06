@@ -54,7 +54,7 @@ export function App() {
                 </div>
                 <div className='d-flex flex-column align-items-center shadow flex-fill m-2'>
                     <RecoveryAlgorithms />
-                    <TransactionActions />
+                    <TransactionActions onStartTransaction={() => undefined} />
                 </div>
             </div>
         </div>
@@ -116,19 +116,44 @@ function RecoveryAlgorithms(props: { chosenRA?: string; onChooseRA?: (algorithm:
     )
 }
 
-function TransactionActions() {
+function TransactionActions(props: {
+    onStartTransaction?: () => void
+    onCommitTransaction?: () => void
+    onAbortTransaction?: () => void
+    onManualGc?: () => void
+}) {
     return (
         <div className='d-flex mx-2 mb-2 w-100'>
-            <button type='button' className='btn btn-outline-success flex-fill m-2 w-25'>
+            <button
+                type='button'
+                className='btn btn-outline-success flex-fill m-2 w-25'
+                disabled={!props.onStartTransaction}
+                onClick={props.onStartTransaction}
+            >
                 Start Transaction
             </button>
-            <button type='button' className='btn btn-outline-primary flex-fill m-2 w-25'>
+            <button
+                type='button'
+                className='btn btn-outline-primary flex-fill m-2 w-25'
+                disabled={!props.onCommitTransaction}
+                onClick={props.onCommitTransaction}
+            >
                 Commit Transaction
             </button>
-            <button type='button' className='btn btn-outline-danger flex-fill m-2 w-25'>
+            <button
+                type='button'
+                className='btn btn-outline-danger flex-fill m-2 w-25'
+                disabled={!props.onAbortTransaction}
+                onClick={props.onAbortTransaction}
+            >
                 Abort Transaction
             </button>
-            <button type='button' className='btn btn-outline-warning flex-fill m-2 w-25'>
+            <button
+                type='button'
+                className='btn btn-outline-warning flex-fill m-2 w-25'
+                disabled={!props.onManualGc}
+                onClick={props.onManualGc}
+            >
                 Manual GC
             </button>
         </div>
