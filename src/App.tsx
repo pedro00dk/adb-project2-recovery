@@ -52,9 +52,11 @@ export function App() {
                     <h5 className='text-center shadow-sm p-2 mb-2 w-100'>VOLATILE DATA</h5>
                     <FileSystemJournal fsPrefix='mem' />
                 </div>
-                <div className='d-flex flex-column align-items-center shadow flex-fill m-2'>
+                <div className='d-flex flex-column align-items-center shadow m-2' style={{ width: '33.33%' }}>
                     <RecoveryAlgorithms />
                     <TransactionActions onStartTransaction={() => undefined} />
+                    <div className='flex-fill'></div>
+                    <TransactionLists active={['12', '13', '25']} aborted={['16']} consolidated={['8']} />
                 </div>
             </div>
         </div>
@@ -91,7 +93,7 @@ function RecoveryAlgorithms(props: { chosenRA?: string; onChooseRA?: (algorithm:
                 style={{ width: '33%' }}
                 onClick={event => (!!props.onChooseRA ? props.onChooseRA('ru') : undefined)}
             >
-                <span className='d-block'>imediate</span>
+                <span className='d-block'>immediate</span>
                 (REDO/UNDO)
             </button>
             <button
@@ -100,7 +102,7 @@ function RecoveryAlgorithms(props: { chosenRA?: string; onChooseRA?: (algorithm:
                 style={{ width: '33%' }}
                 onClick={event => (!!props.onChooseRA ? props.onChooseRA('nru') : undefined)}
             >
-                <span className='d-block'>imediate</span>
+                <span className='d-block'>immediate</span>
                 (NO-REDO/UNDO)
             </button>
             <button
@@ -156,6 +158,38 @@ function TransactionActions(props: {
             >
                 Manual GC
             </button>
+        </div>
+    )
+}
+
+function TransactionLists(props: { active: string[]; aborted: string[]; consolidated: string[] }) {
+    return (
+        <div className='d-flex flex-column align-items-center mx-2 mb-2 w-100'>
+            <h5>Transaction Lists</h5>
+            <div className='d-flex py-2 mx-2 mb-2 w-100 overflow-auto border'>
+                <span className='d-flex p-3 m-2'>Active:</span>
+                {props.active.map((transaction, i) => (
+                    <span key={`active ${i}`} className='shadow-sm p-3 m-2 bg-light'>
+                        {transaction}
+                    </span>
+                ))}
+            </div>
+            <div className='d-flex p-2 mx-2 mb-2 overflow-auto w-100 border'>
+                <span className='d-flex p-3 m-2'>Aborted:</span>
+                {props.aborted.map((transaction, i) => (
+                    <span key={`active ${i}`} className='shadow-sm p-3 m-2 bg-danger'>
+                        {transaction}
+                    </span>
+                ))}
+            </div>
+            <div className='d-flex py-2 mx-2 mb-2 overflow-auto w-100 bg-light'>
+                <span className='d-flex p-3 m-2'>Consolidated:</span>
+                {props.consolidated.map((transaction, i) => (
+                    <span key={`active ${i}`} className='shadow-sm p-3 m-2 bg-primary'>
+                        {transaction}
+                    </span>
+                ))}
+            </div>
         </div>
     )
 }
