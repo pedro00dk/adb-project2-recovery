@@ -1,8 +1,8 @@
 import * as React from 'react'
-import { FileSystemTree, Folder } from './FileSystemTree'
-import { JournalTable } from './JournalTable'
+import { FileSystemTree, Folder, Path } from './FileSystemTree'
+import { Journal, JournalTable } from './JournalTable'
 
-const mock: Folder = {
+const fsMock: Folder = {
     name: 'home',
     children: [
         {
@@ -37,6 +37,24 @@ const mock: Folder = {
     ]
 }
 
+const journalMock: Journal = [
+    { transaction: '12', timestamp: new Date(), operation: 'srt' },
+    { transaction: '12', timestamp: new Date(), operation: 'fol', object: ['home', 'pedro'], after: 'documents' },
+    { transaction: '12', timestamp: new Date(), operation: 'fil', object: ['home', 'pedro', 'docs'], after: 'file' },
+    { transaction: '12', timestamp: new Date(), operation: 'cmt' },
+    { transaction: undefined, timestamp: new Date(), operation: 'chp', object: ['12'] },
+    { transaction: '12', timestamp: new Date(), operation: 'srt' },
+    { transaction: '12', timestamp: new Date(), operation: 'fol', object: ['home', 'pedro'], after: 'documents' },
+    { transaction: '12', timestamp: new Date(), operation: 'fil', object: ['home', 'pedro', 'docs'], after: 'file' },
+    { transaction: '12', timestamp: new Date(), operation: 'cmt' },
+    { transaction: undefined, timestamp: new Date(), operation: 'chp', object: ['12'] },
+    { transaction: '12', timestamp: new Date(), operation: 'srt' },
+    { transaction: '12', timestamp: new Date(), operation: 'fol', object: ['home', 'pedro'], after: 'documents' },
+    { transaction: '12', timestamp: new Date(), operation: 'fil', object: ['home', 'pedro', 'docs'], after: 'file' },
+    { transaction: '12', timestamp: new Date(), operation: 'cmt' },
+    { transaction: undefined, timestamp: new Date(), operation: 'chp', object: ['12'] }
+]
+
 export function App() {
     return (
         <div className='d-flex flex-column vw-100 vh-100'>
@@ -46,16 +64,16 @@ export function App() {
             <div className='d-flex flex-fill'>
                 <div className='d-flex flex-column shadow m-2' style={{ width: '33.33%' }}>
                     <h5 className='text-center shadow-sm p-2 mb-2 w-100'>PERSISTENT DATA</h5>
-                    <FileSystemJournal fsPrefix='disk' />
+                    <FileSystemJournal fs={fsMock} fsPrefix='disk' journal={journalMock} />
                 </div>
                 <div className='d-flex flex-column shadow m-2' style={{ width: '33.33%' }}>
                     <h5 className='text-center shadow-sm p-2 mb-2 w-100'>VOLATILE DATA</h5>
-                    <FileSystemJournal fsPrefix='mem' />
+                    <FileSystemJournal fs={fsMock} fsPrefix='mem' journal={journalMock} />
                 </div>
                 <div className='d-flex flex-column align-items-center shadow m-2' style={{ width: '33.33%' }}>
-                    <RecoveryAlgorithms />
+                    <RecoveryAlgorithms chosenRA={''} />
                     <TransactionActions onStartTransaction={() => undefined} />
-                    <div className='flex-fill'></div>
+                    <div className='flex-fill' />
                     <TransactionLists active={['12', '13', '25']} aborted={['16']} consolidated={['8']} />
                 </div>
             </div>
@@ -63,57 +81,82 @@ export function App() {
     )
 }
 
-function FileSystemJournal(props: { fsPrefix?: string }) {
+function FileSystemJournal(props: {
+    fs: Folder
+    fsPrefix: string
+    journal: Journal
+    onClick?: (path: Path) => void
+    onLoad?: (path: Path) => void
+    onCreate?: (path: Path, type: 'file' | 'folder') => void
+    onDelete?: (path: Path) => void
+    onRename?: (path: Path, name: string) => void
+}) {
     return (
         <>
             <div className='d-flex flex-column shadow-sm mb-2 w-100' style={{ height: '30%' }}>
                 <h6 className='text-center p-1 mb-1 w-100'>File System</h6>
-                <FileSystemTree fs={mock} fsPrefix={props.fsPrefix} />
+                <FileSystemTree
+                    fs={props.fs}
+                    fsPrefix={props.fsPrefix}
+                    onClick={props.onClick}
+                    onLoad={props.onLoad}
+                    onCreate={props.onCreate}
+                    onDelete={props.onDelete}
+                    onRename={props.onRename}
+                />
             </div>
             <div className='d-flex flex-column flex-fill w-100'>
                 <h6 className='text-center p-1 mb-1 w-100'>Journal</h6>
-                <JournalTable />
+                <JournalTable journal={props.journal} />
             </div>
         </>
     )
 }
 
-function RecoveryAlgorithms(props: { chosenRA?: string; onChooseRA?: (algorithm: string) => void }) {
+function RecoveryAlgorithms(props: { chosenRA: string; onChooseRA?: (algorithm: string) => void }) {
     React.useEffect(() => {
-        if (props.chosenRA != undefined) props.onChooseRA('ru')
+        if (props.chosenRA != undefined && !!props.onChooseRA) props.onChooseRA('ur')
     }, [])
 
     return (
-        <div className='d-flex m-2 w-100'>
-            <button
-                type='button'
-                className={`btn ${
-                    !props.chosenRA || props.chosenRA === 'ru' ? 'btn-primary' : 'btn-outline-secondary'
-                } flex-fill m-2`}
-                style={{ width: '33%' }}
-                onClick={event => (!!props.onChooseRA ? props.onChooseRA('ru') : undefined)}
-            >
-                <span className='d-block'>immediate</span>
-                (REDO/UNDO)
-            </button>
-            <button
-                type='button'
-                className={`btn ${props.chosenRA === 'nru' ? 'btn-primary' : 'btn-outline-secondary'} flex-fill m-2`}
-                style={{ width: '33%' }}
-                onClick={event => (!!props.onChooseRA ? props.onChooseRA('nru') : undefined)}
-            >
-                <span className='d-block'>immediate</span>
-                (NO-REDO/UNDO)
-            </button>
-            <button
-                type='button'
-                className={`btn ${props.chosenRA === 'rnu' ? 'btn-primary' : 'btn-outline-secondary'} flex-fill m-2`}
-                style={{ width: '33%' }}
-                onClick={event => (!!props.onChooseRA ? props.onChooseRA('rnu') : undefined)}
-            >
-                <span className='d-block'>delayed</span>
-                (REDO/NO-UNDO)
-            </button>
+        <div className='d-flex flex-column shadow-sm m-2 w-100'>
+            <h6 className='text-center p-2 mb-1'>Recovery Algorithms</h6>
+            <div className='d-flex m-2'>
+                <button
+                    type='button'
+                    className={`btn ${props.chosenRA === 'ur' ? 'btn-primary' : 'btn-outline-secondary'} flex-fill m-2`}
+                    style={{ width: '33%' }}
+                    disabled={!props.onChooseRA}
+                    onClick={event => props.onChooseRA('ur')}
+                >
+                    <span className='d-block'>immediate</span>
+                    (UNDO/REDO)
+                </button>
+                <button
+                    type='button'
+                    className={`btn ${
+                        props.chosenRA === 'unr' ? 'btn-primary' : 'btn-outline-secondary'
+                    } flex-fill m-2`}
+                    style={{ width: '33%' }}
+                    disabled={!props.onChooseRA}
+                    onClick={event => props.onChooseRA('unr')}
+                >
+                    <span className='d-block'>immediate</span>
+                    (UNDO/NO-REDO)
+                </button>
+                <button
+                    type='button'
+                    className={`btn ${
+                        props.chosenRA === 'nur' ? 'btn-primary' : 'btn-outline-secondary'
+                    } flex-fill m-2`}
+                    style={{ width: '33%' }}
+                    disabled={!props.onChooseRA}
+                    onClick={event => props.onChooseRA('nur')}
+                >
+                    <span className='d-block'>delayed</span>
+                    (NO-UNDO/REDO)
+                </button>
+            </div>
         </div>
     )
 }
@@ -125,67 +168,78 @@ function TransactionActions(props: {
     onManualGc?: () => void
 }) {
     return (
-        <div className='d-flex mx-2 mb-2 w-100'>
-            <button
-                type='button'
-                className='btn btn-outline-success flex-fill m-2 w-25'
-                disabled={!props.onStartTransaction}
-                onClick={props.onStartTransaction}
-            >
-                Start Transaction
-            </button>
-            <button
-                type='button'
-                className='btn btn-outline-primary flex-fill m-2 w-25'
-                disabled={!props.onCommitTransaction}
-                onClick={props.onCommitTransaction}
-            >
-                Commit Transaction
-            </button>
-            <button
-                type='button'
-                className='btn btn-outline-danger flex-fill m-2 w-25'
-                disabled={!props.onAbortTransaction}
-                onClick={props.onAbortTransaction}
-            >
-                Abort Transaction
-            </button>
-            <button
-                type='button'
-                className='btn btn-outline-warning flex-fill m-2 w-25'
-                disabled={!props.onManualGc}
-                onClick={props.onManualGc}
-            >
-                Manual GC
-            </button>
+        <div className='d-flex flex-column shadow-sm m-2 w-100'>
+            <h6 className='text-center p-2 mb-1'>Transaction Actions</h6>
+            <div className='d-flex mx-2 mb-2'>
+                <button
+                    type='button'
+                    className='btn btn-outline-success flex-fill m-2 w-25'
+                    disabled={!props.onStartTransaction}
+                    onClick={props.onStartTransaction}
+                >
+                    Start Transaction
+                </button>
+                <button
+                    type='button'
+                    className='btn btn-outline-primary flex-fill m-2 w-25'
+                    disabled={!props.onCommitTransaction}
+                    onClick={props.onCommitTransaction}
+                >
+                    Commit Transaction
+                </button>
+                <button
+                    type='button'
+                    className='btn btn-outline-danger flex-fill m-2 w-25'
+                    disabled={!props.onAbortTransaction}
+                    onClick={props.onAbortTransaction}
+                >
+                    Abort Transaction
+                </button>
+                <button
+                    type='button'
+                    className='btn btn-outline-warning flex-fill m-2 w-25'
+                    disabled={!props.onManualGc}
+                    onClick={props.onManualGc}
+                >
+                    Manual GC
+                </button>
+            </div>
         </div>
     )
 }
 
 function TransactionLists(props: { active: string[]; aborted: string[]; consolidated: string[] }) {
     return (
-        <div className='d-flex flex-column align-items-center mx-2 mb-2 w-100'>
-            <h5>Transaction Lists</h5>
-            <div className='d-flex py-2 mx-2 mb-2 w-100 overflow-auto border'>
+        <div className='d-flex flex-column align-items-center shadow-sm mx-2 w-100'>
+            <h6 className='text-center p-2 mb-1'>Transaction Lists</h6>
+            <div className='d-flex overflow-auto border py-2 mx-2 mb-2 w-100'>
                 <span className='d-flex p-3 m-2'>Active:</span>
                 {props.active.map((transaction, i) => (
-                    <span key={`active ${i}`} className='shadow-sm p-3 m-2 bg-light'>
+                    <span key={`active ${i}`} className='shadow-sm bg-light p-3 m-2'>
                         {transaction}
                     </span>
                 ))}
             </div>
-            <div className='d-flex p-2 mx-2 mb-2 overflow-auto w-100 border'>
+            <div className='d-flex overflow-auto border p-2 mx-2 mb-2 w-100'>
                 <span className='d-flex p-3 m-2'>Aborted:</span>
                 {props.aborted.map((transaction, i) => (
-                    <span key={`active ${i}`} className='shadow-sm p-3 m-2 bg-danger'>
+                    <span
+                        key={`active ${i}`}
+                        className='shadow-sm p-3 m-2'
+                        style={{ background: 'rgba(220, 50, 70, 0.5)' }}
+                    >
                         {transaction}
                     </span>
                 ))}
             </div>
-            <div className='d-flex py-2 mx-2 mb-2 overflow-auto w-100 bg-light'>
+            <div className='d-flex overflow-auto border py-2 mx-2 w-100'>
                 <span className='d-flex p-3 m-2'>Consolidated:</span>
                 {props.consolidated.map((transaction, i) => (
-                    <span key={`active ${i}`} className='shadow-sm p-3 m-2 bg-primary'>
+                    <span
+                        key={`active ${i}`}
+                        className='shadow-sm p-3 m-2'
+                        style={{ background: 'rgba(0, 110, 255, 0.5)' }}
+                    >
                         {transaction}
                     </span>
                 ))}
