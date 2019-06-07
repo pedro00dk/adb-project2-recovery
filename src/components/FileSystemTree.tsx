@@ -20,7 +20,7 @@ const nodeIsFile = (node: File | Folder): node is File => {
     return !!(node as File).content
 }
 
-const getPathString = (path: Path, prefix?: string) => {
+export const getPathString = (path: Path, prefix?: string) => {
     const pathPrefix = prefix != undefined ? `${prefix}:` : ''
     const basePath = path.map(part => part.name).join('/')
     const folderSlash = path.length > 0 && nodeIsFile(path[path.length - 1]) ? '' : '/'
@@ -37,19 +37,19 @@ export function FileSystemTree(props: {
     onRename?: (path: Path, name: string) => void
 }) {
     return (
-        <div  className='d-flex overflow-auto p-1 w-100 h-100'>
-        <ul className='pl-0' style={{ listStyleType: 'none' }}>
-            <FileSystemNode
-                path={[props.fs]}
-                fsPrefix={props.fsPrefix}
-                onClick={props.onClick}
-                onLoad={props.onLoad}
-                onCreate={props.onCreate}
-                onDelete={props.onDelete}
-                onRename={props.onRename}
+        <div className='d-flex overflow-auto p-1 w-100 h-100'>
+            <ul className='pl-0' style={{ listStyleType: 'none' }}>
+                <FileSystemNode
+                    path={[props.fs]}
+                    fsPrefix={props.fsPrefix}
+                    onClick={props.onClick}
+                    onLoad={props.onLoad}
+                    onCreate={props.onCreate}
+                    onDelete={props.onDelete}
+                    onRename={props.onRename}
                 />
-        </ul>
-                </div>
+            </ul>
+        </div>
     )
 }
 
