@@ -10,7 +10,8 @@ export type File = {
 
 export type Folder = {
     name: string
-    children: (File | Folder)[]
+    //children: (File | Folder)[]
+    children: {[name: string]: (File | Folder)}
 }
 
 export type Path = (File | Folder)[]

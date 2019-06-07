@@ -1,5 +1,27 @@
 import * as React from 'react'
 
+export type Log = {
+    transaction: string
+    timestamp: Date
+    operation:
+        | 'start'
+        | 'create folder'
+        | 'create file'
+        | 'read'
+        | 'write'
+        | 'delete'
+        | 'rename'
+        /* | move */
+        | 'commit'
+        | 'checkpoint'
+    object?: string[]
+    before?: string
+    after?: string
+    prevTrOp?: number
+    nextTrOp?: number
+}
+
+export type Journal = Log[]
 export function Journal() {
     return (
         <table className='table'>
