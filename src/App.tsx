@@ -31,7 +31,7 @@ export function App() {
                     <h5 className='text-center shadow-sm p-2 mb-2 w-100'>PERSISTENT DATA</h5>
                     <FileSystemJournal
                         fs={[database.persistentFs]}
-                        fsPrefix='persistent'
+                        prefix='persistent'
                         journal={database.persistentJournal}
                         actions={{
                             ...actions,
@@ -51,7 +51,7 @@ export function App() {
                     <h5 className='text-center shadow-sm p-2 mb-2 w-100'>VOLATILE DATA</h5>
                     <FileSystemJournal
                         fs={[database.volatileFs]}
-                        fsPrefix='volatile'
+                        prefix='volatile'
                         journal={database.volatileJournal}
                         actions={{ ...actions, read: undefined }}
                         click={(path, node) =>
@@ -87,7 +87,7 @@ export function App() {
 
 function FileSystemJournal(props: {
     fs: NodePath
-    fsPrefix: string
+    prefix: string
     journal: Journal
     actions: Actions
     click?: (path: StringPath, node: Node) => void
@@ -96,7 +96,7 @@ function FileSystemJournal(props: {
         <>
             <div className='d-flex flex-column shadow-sm mb-2 w-100' style={{ height: '30%' }}>
                 <h6 className='text-center p-1 mb-1 w-100'>File System</h6>
-                <FileSystemTree fs={props.fs} fsPrefix={props.fsPrefix} actions={props.actions} click={props.click} />
+                <FileSystemTree fs={props.fs} prefix={props.prefix} actions={props.actions} click={props.click} />
             </div>
             <div className='d-flex flex-column flex-fill w-100'>
                 <h6 className='text-center p-1 mb-1 w-100'>Journal</h6>
