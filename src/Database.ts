@@ -175,14 +175,14 @@ export class Database {
         await this.setActions(this.actions('commit', 'abort', 'restart', 'read', 'write', 'create', 'delete', 'rename'))
     }
 
-    async create(path: StringPath, type: 'file' | 'folder') {
+    private async create(path: StringPath, type: 'file' | 'folder') {
         const persistentPath = fromStringPath(path, this.persistentFs)
         const volatilePath = fromStringPath(path, this.volatileFs)
         const persistentNode = persistentPath.slice(-1).pop()
         const volatileNode = volatilePath.slice(-1).pop()
 
         let name: string = type
-        for (let i = 1; !!persistentNode.children[name] && !!volatileNode.children[name]; i++)
+        for (let i = 1; !!persistentNode.children[name] || !!volatileNode.children[name]; i++)
             name = `${type} ${i}`
             //
         ;[this.volatileJournal, this.persistentJournal].forEach(journal => {
@@ -190,7 +190,7 @@ export class Database {
                 transaction: this.currentTransactionId.toString(),
                 timestamp: new Date(),
                 operation: type === 'file' ? 'fil' : 'fol',
-                object: volatilePath.map(node => node.name),
+                object: path,
                 after: name
             })
         })
@@ -201,7 +201,7 @@ export class Database {
         await this.setActions(this.actions('commit', 'abort', 'restart', 'read', 'write', 'create', 'delete', 'rename'))
     }
 
-    async delete(path: StringPath) {
+    private async delete(path: StringPath) {
         const persistentPath = fromStringPath(path, this.persistentFs)
         const volatilePath = fromStringPath(path, this.volatileFs)
         const persistentParent = persistentPath.slice(-2, -1).pop()
@@ -216,7 +216,7 @@ export class Database {
                 transaction: this.currentTransactionId.toString(),
                 timestamp: new Date(),
                 operation: 'del',
-                object: volatilePath.map(node => node.name)
+                object: path
             })
         })
 
@@ -227,7 +227,7 @@ export class Database {
         await this.setActions(this.actions('commit', 'abort', 'restart', 'read', 'write', 'create', 'delete', 'rename'))
     }
 
-    async rename(path: StringPath, name: string) {
+    private async rename(path: StringPath, name: string) {
         const persistentPath = fromStringPath(path, this.persistentFs)
         const volatilePath = fromStringPath(path, this.volatileFs)
         const persistentNode = persistentPath.slice(-1).pop()
@@ -244,7 +244,7 @@ export class Database {
                 transaction: this.currentTransactionId.toString(),
                 timestamp: new Date(),
                 operation: 'ren',
-                object: volatilePath.map(node => node.name),
+                object: path,
                 after: name
             })
         })
@@ -262,21 +262,12 @@ export class Database {
         await this.setActions(this.actions('commit', 'abort', 'restart', 'read', 'write', 'create', 'delete', 'rename'))
     }
 
-    restart() {
+    private async restart() {
         this.volatileFs = { name: 'fs', children: {} }
         this.volatileJournal = []
 
-        this.setActions(this.actions('start', 'restart'))
+        await this.setActions(this.actions('start', 'restart'))
     }
 
     // checkpoint() {}
-
-    getMirrorPath(root: Node, path: NodePath) {
-        const mirrorPath = [root]
-        path.slice(1).forEach(node => {
-            const lastNode = mirrorPath[mirrorPath.length - 1]
-            mirrorPath.push(lastNode.children[node.name])
-        })
-        return mirrorPath
-    }
 }
