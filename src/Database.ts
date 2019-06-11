@@ -49,14 +49,14 @@ export type Journal = Log[]
 
 export type Actions = {
     start?: () => void
-    commit?: () => void
-    abort?: () => void
+    commit?: (transaction: string) => void
+    abort?: (transaction: string) => void
+    read?: (transaction: string, path: StringPath) => void
+    create?: (transaction: string, path: StringPath, type: 'file' | 'folder') => void
+    delete?: (transaction: string, path: StringPath) => void
+    rename?: (transaction: string, path: StringPath, name: string) => void
+    write?: (transaction: string, path: StringPath, text: string) => void
     restart?: () => void
-    read?: (path: StringPath) => void
-    create?: (path: StringPath, type: 'file' | 'folder') => void
-    delete?: (path: StringPath) => void
-    rename?: (path: StringPath, name: string) => void
-    write?: (path: StringPath, text: string) => void
 }
 
 export class Database {
@@ -64,12 +64,10 @@ export class Database {
     persistentJournal: Journal = []
     volatileFs: Node = { name: 'fs', children: {} }
     volatileJournal: Journal = []
-    activeTransactions: Set<number> = new Set()
-    abortedTransactions: Set<number> = new Set()
-    consolidatedTransactions: Set<number> = new Set()
+    activeTransactions: Set<string> = new Set()
+    abortedTransactions: Set<string> = new Set()
+    consolidatedTransactions: Set<string> = new Set()
     transactionIdGenerator: number = 0
-    //
-    currentTransactionId: number = undefined
 
     constructor(public setActions: (actions?: Actions, wait?: number) => Promise<void>) {
         this.setActions(this.actions('start', 'restart'))
@@ -78,76 +76,71 @@ export class Database {
     private actions(...selector: (keyof Actions)[]): Actions {
         const actions: Actions = {
             start: () => this.start(),
-            commit: () => this.commit(),
-            abort: () => this.abort(),
-            restart: () => this.restart(),
-            read: path => this.read(path),
-            write: (path, text) => this.write(path, text),
-            create: (path, type) => this.create(path, type),
-            delete: path => this.delete(path),
-            rename: (path, name) => this.rename(path, name)
+            commit: transaction => this.commit(transaction),
+            abort: transaction => this.abort(transaction),
+            read: (transaction, path) => this.read(transaction, path),
+            write: (transaction, path, text) => this.write(transaction, path, text),
+            create: (transaction, path, type) => this.create(transaction, path, type),
+            delete: (transaction, path) => this.delete(transaction, path),
+            rename: (transaction, path, name) => this.rename(transaction, path, name),
+            restart: () => this.restart()
         }
         return Object.fromEntries(Object.entries(actions).filter(entry => selector.includes(entry[0] as keyof Actions)))
     }
 
     private async start() {
-        this.currentTransactionId = this.transactionIdGenerator++
+        const transaction = (this.transactionIdGenerator++).toString()
         ;[this.volatileJournal, this.persistentJournal].forEach(journal =>
-            journal.push({
-                transaction: this.currentTransactionId.toString(),
-                timestamp: new Date(),
-                operation: 'stt',
-                object: []
-            })
+            journal.push({ transaction, timestamp: new Date(), operation: 'stt', object: [] })
         )
-        this.activeTransactions.add(this.currentTransactionId)
+        this.activeTransactions.add(transaction)
 
-        await this.setActions(this.actions('commit', 'abort', 'restart', 'read', 'write', 'create', 'delete', 'rename'))
+        await this.setActions(
+            this.actions('start', 'commit', 'abort', 'restart', 'read', 'write', 'create', 'delete', 'rename')
+        )
     }
 
-    private async commit() {
+    private async commit(transaction: string) {
+        if (transaction == undefined) {
+            return
+        }
         ;[this.volatileJournal, this.persistentJournal].forEach(journal => {
-            journal.push({
-                transaction: this.currentTransactionId.toString(),
-                timestamp: new Date(),
-                operation: 'cmt',
-                object: undefined
-            })
-            journal.push({
-                transaction: undefined,
-                timestamp: new Date(),
-                operation: 'chp',
-                object: undefined
-            })
+            journal.push({ transaction, timestamp: new Date(), operation: 'cmt', object: undefined })
+            journal.push({ transaction: undefined, timestamp: new Date(), operation: 'chp', object: undefined })
         })
 
-        this.consolidatedTransactions.add(this.currentTransactionId)
-        this.activeTransactions.delete(this.currentTransactionId)
-        this.currentTransactionId = undefined
+        this.consolidatedTransactions.add(transaction)
+        this.activeTransactions.delete(transaction)
 
-        await this.setActions(this.actions('start', 'restart'))
+        await this.setActions(
+            this.actions('start', 'commit', 'abort', 'restart', 'read', 'write', 'create', 'delete', 'rename')
+        )
     }
 
-    private async abort() {
+    private async abort(transaction: string) {
+        if (transaction == undefined) {
+            return
+        }
+
         // TODO undo operations
 
         ;[this.volatileJournal, this.persistentJournal].forEach(journal => {
-            journal.push({
-                transaction: this.currentTransactionId.toString(),
-                timestamp: new Date(),
-                operation: 'abt',
-                object: undefined
-            })
+            journal.push({ transaction, timestamp: new Date(), operation: 'abt', object: undefined })
         })
 
-        this.abortedTransactions.add(this.currentTransactionId)
-        this.activeTransactions.delete(this.currentTransactionId)
-        this.currentTransactionId = undefined
+        this.abortedTransactions.add(transaction)
+        this.activeTransactions.delete(transaction)
 
-        await this.setActions(this.actions('start', 'restart'))
+        await this.setActions(
+            this.actions('start', 'commit', 'abort', 'restart', 'read', 'write', 'create', 'delete', 'rename')
+        )
     }
 
-    private async read(path: StringPath) {
+    private async read(transaction: string, path: StringPath) {
+        if (transaction == undefined) {
+            return
+        }
+
         const persistentPath = fromStringPath(path, this.persistentFs)
 
         let volatilePointer = this.volatileFs
@@ -157,21 +150,28 @@ export class Database {
             volatilePointer = volatilePointer.children[node.name]
         })
 
-        await this.setActions(this.actions('commit', 'abort', 'restart', 'read', 'write', 'create', 'delete', 'rename'))
+        await this.setActions(
+            this.actions('start', 'commit', 'abort', 'restart', 'read', 'write', 'create', 'delete', 'rename')
+        )
     }
 
-    async write(path: StringPath, text: string) {
+    private async write(transaction: string, path: StringPath, text: string) {
+        if (transaction == undefined) {
+            return
+        }
+
         const persistentPath = fromStringPath(path, this.persistentFs)
         const volatilePath = fromStringPath(path, this.volatileFs)
         const persistentNode = persistentPath.slice(-1).pop()
         const volatileNode = volatilePath.slice(-1).pop()
 
-        if (volatileNode.content == undefined || volatileNode.content === text)
-            return //
-            //
+        if (volatileNode.content == undefined || volatileNode.content === text) {
+            return
+        }
+
         ;[this.volatileJournal, this.persistentJournal].forEach(journal => {
             journal.push({
-                transaction: this.currentTransactionId.toString(),
+                transaction,
                 timestamp: new Date(),
                 operation: 'wr',
                 object: path,
@@ -183,22 +183,29 @@ export class Database {
         volatileNode.content = text
         persistentNode.content = text
 
-        await this.setActions(this.actions('commit', 'abort', 'restart', 'read', 'write', 'create', 'delete', 'rename'))
+        await this.setActions(
+            this.actions('start', 'commit', 'abort', 'restart', 'read', 'write', 'create', 'delete', 'rename')
+        )
     }
 
-    private async create(path: StringPath, type: 'file' | 'folder') {
+    private async create(transaction: string, path: StringPath, type: 'file' | 'folder') {
+        if (transaction == undefined) {
+            return
+        }
+
         const persistentPath = fromStringPath(path, this.persistentFs)
         const volatilePath = fromStringPath(path, this.volatileFs)
         const persistentNode = persistentPath.slice(-1).pop()
         const volatileNode = volatilePath.slice(-1).pop()
 
         let name: string = type
-        for (let i = 1; !!persistentNode.children[name] || !!volatileNode.children[name]; i++)
+        for (let i = 1; !!persistentNode.children[name] || !!volatileNode.children[name]; i++) {
             name = `${type} ${i}`
-            //
+        }
+
         ;[this.volatileJournal, this.persistentJournal].forEach(journal => {
             journal.push({
-                transaction: this.currentTransactionId.toString(),
+                transaction,
                 timestamp: new Date(),
                 operation: type === 'file' ? 'fil' : 'fol',
                 object: path,
@@ -209,36 +216,44 @@ export class Database {
         volatileNode.children[name] = type === 'file' ? { name, content: '' } : { name, children: {} }
         persistentNode.children[name] = type === 'file' ? { name, content: '' } : { name, children: {} }
 
-        await this.setActions(this.actions('commit', 'abort', 'restart', 'read', 'write', 'create', 'delete', 'rename'))
+        await this.setActions(
+            this.actions('start', 'commit', 'abort', 'restart', 'read', 'write', 'create', 'delete', 'rename')
+        )
     }
 
-    private async delete(path: StringPath) {
+    private async delete(transaction: string, path: StringPath) {
+        if (transaction == undefined) {
+            return
+        }
+
         const persistentPath = fromStringPath(path, this.persistentFs)
         const volatilePath = fromStringPath(path, this.volatileFs)
         const persistentParent = persistentPath.slice(-2, -1).pop()
         const volatileParent = volatilePath.slice(-2, -1).pop()
 
-        if (!volatileParent)
+        if (!volatileParent) {
             // ignore operation, tried to delete root
-            return //
-            //
-        ;[this.volatileJournal, this.persistentJournal].forEach(journal => {
-            journal.push({
-                transaction: this.currentTransactionId.toString(),
-                timestamp: new Date(),
-                operation: 'del',
-                object: path
-            })
-        })
+            return
+        }
+
+        ;[this.volatileJournal, this.persistentJournal].forEach(journal =>
+            journal.push({ transaction, timestamp: new Date(), operation: 'del', object: path })
+        )
 
         const nodeName = path.slice(-1).pop()
         delete volatileParent.children[nodeName]
         delete persistentParent.children[nodeName]
 
-        await this.setActions(this.actions('commit', 'abort', 'restart', 'read', 'write', 'create', 'delete', 'rename'))
+        await this.setActions(
+            this.actions('start', 'commit', 'abort', 'restart', 'read', 'write', 'create', 'delete', 'rename')
+        )
     }
 
-    private async rename(path: StringPath, name: string) {
+    private async rename(transaction: string, path: StringPath, name: string) {
+        if (transaction == undefined) {
+            return
+        }
+
         const persistentPath = fromStringPath(path, this.persistentFs)
         const volatilePath = fromStringPath(path, this.volatileFs)
         const persistentNode = persistentPath.slice(-1).pop()
@@ -246,18 +261,13 @@ export class Database {
         const persistentParent = persistentPath.slice(-2, -1).pop()
         const volatileParent = volatilePath.slice(-2, -1).pop()
 
-        if (!volatileParent || !!volatileParent.children[name] || !!persistentParent.children[name])
+        if (!volatileParent || !!volatileParent.children[name] || !!persistentParent.children[name]) {
             // ignore operation, name already exists or tried to rename root
-            return //
-            //
+            return
+        }
+
         ;[this.volatileJournal, this.persistentJournal].forEach(journal => {
-            journal.push({
-                transaction: this.currentTransactionId.toString(),
-                timestamp: new Date(),
-                operation: 'ren',
-                object: path,
-                after: name
-            })
+            journal.push({ transaction, timestamp: new Date(), operation: 'ren', object: path, after: name })
         })
 
         const nodeName = path.slice(-1).pop()
@@ -270,7 +280,9 @@ export class Database {
         persistentNode.name = name
         persistentParent.children[name] = persistentNode
 
-        await this.setActions(this.actions('commit', 'abort', 'restart', 'read', 'write', 'create', 'delete', 'rename'))
+        await this.setActions(
+            this.actions('start', 'commit', 'abort', 'restart', 'read', 'write', 'create', 'delete', 'rename')
+        )
     }
 
     private async restart() {

@@ -4,7 +4,7 @@ import { Actions, fromNodePath, getPathname, Node, nodeIsFile, NodePath, nodeSor
 
 import 'react-contexify/dist/ReactContexify.min.css'
 
-export function FileSystemTree(props: { fs: Node; prefix: string; actions: Actions }) {
+export function FileSystemTree(props: { fs: Node; prefix: string; transaction: string; actions: Actions }) {
     const stringPath = fromNodePath([props.fs])
     const pathname = getPathname(stringPath, props.prefix)
 
@@ -20,6 +20,7 @@ export function FileSystemTree(props: { fs: Node; prefix: string; actions: Actio
                                     key={i}
                                     path={[props.fs, node]}
                                     prefix={props.prefix}
+                                    transaction={props.transaction}
                                     actions={props.actions}
                                 />
                             )
@@ -27,11 +28,15 @@ export function FileSystemTree(props: { fs: Node; prefix: string; actions: Actio
                 </ul>
             </MenuProvider>
             <Menu id={pathname}>
-                {!!props.actions.read && <Item onClick={() => props.actions.read(stringPath)}>read</Item>}
+                {!!props.actions.read && (
+                    <Item onClick={() => props.actions.read(props.transaction, stringPath)}>read</Item>
+                )}
                 {!!props.actions.create && (
                     <Submenu label='create'>
-                        <Item onClick={() => props.actions.create(stringPath, 'file')}>file</Item>
-                        <Item onClick={() => props.actions.create(stringPath, 'folder')}>folder</Item>
+                        <Item onClick={() => props.actions.create(props.transaction, stringPath, 'file')}>file</Item>
+                        <Item onClick={() => props.actions.create(props.transaction, stringPath, 'folder')}>
+                            folder
+                        </Item>
                     </Submenu>
                 )}
             </Menu>
@@ -39,7 +44,7 @@ export function FileSystemTree(props: { fs: Node; prefix: string; actions: Actio
     )
 }
 
-function FileSystemNode(props: { path: NodePath; prefix: string; actions: Actions }) {
+function FileSystemNode(props: { path: NodePath; prefix: string; transaction: string; actions: Actions }) {
     const [write, setWrite] = React.useState(false)
     const [rename, setRename] = React.useState(false)
     const node = props.path.slice(-1).pop()
@@ -57,15 +62,23 @@ function FileSystemNode(props: { path: NodePath; prefix: string; actions: Action
                         {isFile && <span className='font-weight-lighter text-muted ml-3'>{node.content}</span>}
                     </MenuProvider>
                     <Menu id={pathname}>
-                        {!!props.actions.read && <Item onClick={() => props.actions.read(stringPath)}>read</Item>}
+                        {!!props.actions.read && (
+                            <Item onClick={() => props.actions.read(props.transaction, stringPath)}>read</Item>
+                        )}
                         {!!props.actions.write && <Item onClick={() => setWrite(true)}>write</Item>}
                         {!!props.actions.create && !isFile && (
                             <Submenu label='create'>
-                                <Item onClick={() => props.actions.create(stringPath, 'file')}>file</Item>
-                                <Item onClick={() => props.actions.create(stringPath, 'folder')}>folder</Item>
+                                <Item onClick={() => props.actions.create(props.transaction, stringPath, 'file')}>
+                                    file
+                                </Item>
+                                <Item onClick={() => props.actions.create(props.transaction, stringPath, 'folder')}>
+                                    folder
+                                </Item>
                             </Submenu>
                         )}
-                        {!!props.actions.delete && <Item onClick={() => props.actions.delete(stringPath)}>delete</Item>}
+                        {!!props.actions.delete && (
+                            <Item onClick={() => props.actions.delete(props.transaction, stringPath)}>delete</Item>
+                        )}
                         {!!props.actions.rename && <Item onClick={() => setRename(true)}>rename</Item>}
                     </Menu>
                 </>
@@ -73,13 +86,17 @@ function FileSystemNode(props: { path: NodePath; prefix: string; actions: Action
                 <input
                     type='text'
                     defaultValue={node.content}
-                    onBlur={event => (props.actions.write(stringPath, event.target.value), setWrite(false))}
+                    onBlur={event => (
+                        props.actions.write(props.transaction, stringPath, event.target.value), setWrite(false)
+                    )}
                 />
             ) : rename ? (
                 <input
                     type='text'
                     defaultValue={node.name}
-                    onBlur={event => (props.actions.rename(stringPath, event.target.value), setRename(false))}
+                    onBlur={event => (
+                        props.actions.rename(props.transaction, stringPath, event.target.value), setRename(false)
+                    )}
                 />
             ) : (
                 undefined
@@ -93,6 +110,7 @@ function FileSystemNode(props: { path: NodePath; prefix: string; actions: Action
                                 key={i}
                                 path={[...props.path, child]}
                                 prefix={props.prefix}
+                                transaction={props.transaction}
                                 actions={props.actions}
                             />
                         ))}

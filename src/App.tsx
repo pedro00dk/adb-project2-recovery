@@ -3,13 +3,16 @@ import { FileSystemTree } from './components/FileSystemTree'
 import { JournalTable } from './components/JournalTable'
 import { SplitPane } from './components/SplitPane'
 import { TransactionLists } from './components/TransactionLists'
-import { Actions, Database, Journal, Node, nodeIsFile, NodePath, StringPath } from './Database'
+import { Actions, Database, Journal, Node } from './Database'
 
 export function App() {
     const [actions, setActions] = React.useState<Actions>({})
     const [database, setDatabase] = React.useState(
         () => new Database((actions, wait) => new Promise(res => setTimeout(() => res(setActions(actions)), wait)))
     )
+    const [selectedTransaction, setSelectedTransaction] = React.useState<string>()
+    if (selectedTransaction != undefined && !database.activeTransactions.has(selectedTransaction))
+        setSelectedTransaction(undefined)
 
     return (
         <div className='d-flex flex-column vw-100 vh-100'>
@@ -25,6 +28,7 @@ export function App() {
                                 fs={database.persistentFs}
                                 prefix='persistent'
                                 journal={database.persistentJournal}
+                                transaction={selectedTransaction}
                                 actions={{
                                     ...actions,
                                     write: undefined,
@@ -38,6 +42,7 @@ export function App() {
                             <h5 className='text-center shadow-sm p-2 mb-2 w-100'>MEMORY</h5>
                             <FileSystemJournal
                                 fs={database.volatileFs}
+                                transaction={selectedTransaction}
                                 prefix='volatile'
                                 journal={database.volatileJournal}
                                 actions={{ ...actions, read: undefined }}
@@ -45,7 +50,19 @@ export function App() {
                         </div>
                     </SplitPane>
                     <div className='d-flex flex-column w-100 h-100'>
-                        <ControlPanel actions={actions} database={database} />
+                        <RecoveryAlgorithms chosenRA={'ur'} />
+                        <TransactionActions transaction={selectedTransaction} actions={actions} />
+                        <TransactionLists
+                            active={[...database.activeTransactions].sort().map(transaction => transaction.toString())}
+                            consolidated={[...database.consolidatedTransactions]
+                                .sort()
+                                .map(transaction => transaction.toString())}
+                            aborted={[...database.abortedTransactions]
+                                .sort()
+                                .map(transaction => transaction.toString())}
+                            selected={selectedTransaction}
+                            onClick={transaction => setSelectedTransaction(transaction)}
+                        />
                     </div>
                 </SplitPane>
             </div>
@@ -53,12 +70,23 @@ export function App() {
     )
 }
 
-function FileSystemJournal(props: { fs: Node; prefix: string; journal: Journal; actions: Actions }) {
+function FileSystemJournal(props: {
+    fs: Node
+    prefix: string
+    journal: Journal
+    transaction: string
+    actions: Actions
+}) {
     return (
         <SplitPane split='horizontal' base={'50%'} left={100} right={-100}>
             <div className='d-flex flex-column w-100 h-100'>
                 <h6 className='text-center p-1 mb-1 w-100'>File System</h6>
-                <FileSystemTree fs={props.fs} prefix={props.prefix} actions={props.actions} />
+                <FileSystemTree
+                    fs={props.fs}
+                    prefix={props.prefix}
+                    actions={props.actions}
+                    transaction={props.transaction}
+                />
             </div>
             <div className='d-flex flex-column w-100 h-100'>
                 <h6 className='text-center p-1 mb-1 w-100'>Journal</h6>
@@ -67,22 +95,6 @@ function FileSystemJournal(props: { fs: Node; prefix: string; journal: Journal; 
                 </div>
             </div>
         </SplitPane>
-    )
-}
-
-function ControlPanel(props: { actions: Actions; database: Database }) {
-    return (
-        <>
-            <RecoveryAlgorithms chosenRA={'ur'} />
-            <TransactionActions actions={props.actions} />
-            <TransactionLists
-                active={[...props.database.activeTransactions].sort().map(transaction => transaction.toString())}
-                consolidated={[...props.database.consolidatedTransactions]
-                    .sort()
-                    .map(transaction => transaction.toString())}
-                aborted={[...props.database.abortedTransactions].sort().map(transaction => transaction.toString())}
-            />
-        </>
     )
 }
 
@@ -134,7 +146,7 @@ function RecoveryAlgorithms(props: { chosenRA: string; onChooseRA?: (algorithm: 
     )
 }
 
-function TransactionActions(props: { actions: Actions }) {
+function TransactionActions(props: { transaction: string; actions: Actions }) {
     return (
         <div className='d-flex flex-column shadow-sm m-2 w-100'>
             <h6 className='text-center p-2 mb-1'>Transaction Actions</h6>
@@ -151,7 +163,7 @@ function TransactionActions(props: { actions: Actions }) {
                     type='button'
                     className='btn btn-outline-primary m-2 w-25'
                     disabled={!props.actions.commit}
-                    onClick={props.actions.commit}
+                    onClick={event => props.actions.commit(props.transaction)}
                 >
                     Commit Transaction
                 </button>
@@ -159,7 +171,7 @@ function TransactionActions(props: { actions: Actions }) {
                     type='button'
                     className='btn btn-outline-warning m-2 w-25'
                     disabled={!props.actions.abort}
-                    onClick={props.actions.abort}
+                    onClick={event => props.actions.abort(props.transaction)}
                 >
                     Abort Transaction
                 </button>
@@ -167,7 +179,7 @@ function TransactionActions(props: { actions: Actions }) {
                     type='button'
                     className='btn btn-outline-danger  m-2 w-25'
                     disabled={!props.actions.restart}
-                    onClick={props.actions.restart}
+                    onClick={() => props.actions.restart()}
                 >
                     Restart (Fail)
                 </button>
