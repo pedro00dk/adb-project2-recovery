@@ -7,28 +7,25 @@ export function JournalTable(props: { journal: Journal }) {
     const logDecorations: { [operation: string]: string } = {
         stt: 'table-success',
         cmt: 'table-primary',
-        abt: 'table-danger',
+        abt: 'table-warning',
         chp: 'table-secondary'
     }
 
     return (
-        <table className='table table-sm table-bordered d-flex flex-column w-100 h-100 overflow-auto m-0'>
+        <table className='table table-sm table-bordered m-0 w-100 h-100' style={{ tableLayout: 'fixed' }}>
             <thead>
-                <tr className='d-flex flex-row'>
+                <tr>
                     <th style={{ width: '12%' }}>tid</th>
                     <th style={{ width: '12%' }}>time</th>
-                    <th style={{ width: '10%' }}>op</th>
-                    <th style={{ width: '36%' }}>obj</th>
+                    <th style={{ width: '15%' }}>op</th>
+                    <th style={{ width: '31%' }}>object</th>
                     <th style={{ width: '15%' }}>{'<<'}</th>
                     <th style={{ width: '15%' }}>{'>>'}</th>
-                    {/*
-                    <th>{'<-p'}</th>
-                    <th>{'p->'}</th> */}
                 </tr>
             </thead>
-            <tbody className='d-flex flex-column'>
+            <tbody>
                 {journal.map((log, i) => (
-                    <tr key={i} className={'d-flex ' + logDecorations[log.operation]}>
+                    <tr key={i} className={logDecorations[log.operation]}>
                         <th className='text-truncate' style={{ width: '12%' }} title={log.transaction}>
                             {log.transaction}
                         </th>
@@ -39,12 +36,12 @@ export function JournalTable(props: { journal: Journal }) {
                         >
                             {log.timestamp.getMinutes()}:{log.timestamp.getSeconds()}
                         </td>
-                        <td className='text-truncate' style={{ width: '10%' }} title={log.operation}>
+                        <td className='text-truncate' style={{ width: '15%' }} title={log.operation}>
                             {log.operation}
                         </td>
                         <td
                             className='text-truncate'
-                            style={{ width: '36%' }}
+                            style={{ width: '31%' }}
                             title={`${!!log.object ? log.object.join('/') : ''}`}
                         >{`${!!log.object ? log.object.join('/') : ''}`}</td>
                         <td className='text-truncate' style={{ width: '15%' }} title={log.before}>
@@ -53,9 +50,6 @@ export function JournalTable(props: { journal: Journal }) {
                         <td className='text-truncate' style={{ width: '15%' }} title={log.after}>
                             {log.after}
                         </td>
-                        {/*
-                        <td>{log.transaction}</td>
-                        <td>{log.transaction}</td> */}
                     </tr>
                 ))}
             </tbody>

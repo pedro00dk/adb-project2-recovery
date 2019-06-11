@@ -1,7 +1,7 @@
 import * as React from 'react'
-import { Editor } from './components/Editor'
 import { FileSystemTree } from './components/FileSystemTree'
 import { JournalTable } from './components/JournalTable'
+import { SplitPane } from './components/SplitPane'
 import { TransactionLists } from './components/TransactionLists'
 import { Actions, Database, Journal, Node, nodeIsFile, NodePath, StringPath } from './Database'
 
@@ -11,65 +11,43 @@ export function App() {
         () => new Database((actions, wait) => new Promise(res => setTimeout(() => res(setActions(actions)), wait)))
     )
 
-    const [clickedNode, setClickedNode] = React.useState<{
-        path: StringPath
-        node: Node
-        location: 'persistent' | 'volatile'
-    }>({
-        path: undefined,
-        node: undefined,
-        location: undefined
-    })
-
     return (
         <div className='d-flex flex-column vw-100 vh-100'>
-            <nav className='navbar navbar-light bg-light'>
-                <span className='navbar-brand mb-0 h1'>FSDB</span>
+            <nav className='navbar navbar-light bg-light shadow-sm'>
+                <span className='navbar-brand mb-0'>FS Database</span>
             </nav>
-            <div className='d-flex flex-fill'>
-                <div className='d-flex flex-column shadow m-2' style={{ width: '33.33%' }}>
-                    <h5 className='text-center shadow-sm p-2 mb-2 w-100'>PERSISTENT DATA</h5>
-                    <FileSystemJournal
-                        fs={database.persistentFs}
-                        prefix='persistent'
-                        journal={database.persistentJournal}
-                        actions={{
-                            ...actions,
-                            write: undefined,
-                            create: undefined,
-                            delete: undefined,
-                            rename: undefined
-                        }}
-                    />
-                </div>
-                <div className='d-flex flex-column shadow m-2' style={{ width: '33.33%' }}>
-                    <h5 className='text-center shadow-sm p-2 mb-2 w-100'>VOLATILE DATA</h5>
-                    <FileSystemJournal
-                        fs={database.volatileFs}
-                        prefix='volatile'
-                        journal={database.volatileJournal}
-                        actions={{ ...actions, read: undefined }}
-                    />
-                </div>
-                <div className='d-flex flex-column align-items-center shadow m-2' style={{ width: '33.33%' }}>
-                    <RecoveryAlgorithms chosenRA={'ur'} />
-                    <TransactionActions actions={actions} />
-                    <div className='d-flex flex-column flex-fill w-100'>
-                        <h6 className='text-center p-1 mb-1 w-100'>Editor</h6>
-                        <Editor
-                            content={!!clickedNode.path ? clickedNode.node.content : ''}
-                            editable={!!actions.write && clickedNode.location === 'volatile'}
-                            onChange={text => (!!actions.write ? actions.write(clickedNode.path, text) : undefined)}
-                        />
+            <div className='d-flex flex-fill w-100'>
+                <SplitPane split='vertical' base={'75%'} left={100} right={-100}>
+                    <SplitPane split='vertical' base={'50%'} left={100} right={-100}>
+                        <div className='d-flex flex-column w-100 h-100'>
+                            <h5 className='text-center shadow-sm p-2 mb-2 w-100'>DISK</h5>
+                            <FileSystemJournal
+                                fs={database.persistentFs}
+                                prefix='persistent'
+                                journal={database.persistentJournal}
+                                actions={{
+                                    ...actions,
+                                    write: undefined,
+                                    create: undefined,
+                                    delete: undefined,
+                                    rename: undefined
+                                }}
+                            />
+                        </div>
+                        <div className='d-flex flex-column w-100 h-100'>
+                            <h5 className='text-center shadow-sm p-2 mb-2 w-100'>MEMORY</h5>
+                            <FileSystemJournal
+                                fs={database.volatileFs}
+                                prefix='volatile'
+                                journal={database.volatileJournal}
+                                actions={{ ...actions, read: undefined }}
+                            />
+                        </div>
+                    </SplitPane>
+                    <div className='d-flex flex-column w-100 h-100'>
+                        <ControlPanel actions={actions} database={database} />
                     </div>
-                    <TransactionLists
-                        active={[...database.activeTransactions].sort().map(transaction => transaction.toString())}
-                        consolidated={[...database.consolidatedTransactions]
-                            .sort()
-                            .map(transaction => transaction.toString())}
-                        aborted={[...database.abortedTransactions].sort().map(transaction => transaction.toString())}
-                    />
-                </div>
+                </SplitPane>
             </div>
         </div>
     )
@@ -77,15 +55,33 @@ export function App() {
 
 function FileSystemJournal(props: { fs: Node; prefix: string; journal: Journal; actions: Actions }) {
     return (
-        <>
-            <div className='d-flex flex-column shadow-sm mb-2 w-100' style={{ height: '30%' }}>
+        <SplitPane split='horizontal' base={'50%'} left={100} right={-100}>
+            <div className='d-flex flex-column w-100 h-100'>
                 <h6 className='text-center p-1 mb-1 w-100'>File System</h6>
                 <FileSystemTree fs={props.fs} prefix={props.prefix} actions={props.actions} />
             </div>
-            <div className='d-flex flex-column flex-fill w-100'>
+            <div className='d-flex flex-column w-100 h-100'>
                 <h6 className='text-center p-1 mb-1 w-100'>Journal</h6>
-                <JournalTable journal={props.journal} />
+                <div className='d-flex overflow-auto w-100'>
+                    <JournalTable journal={props.journal} />
+                </div>
             </div>
+        </SplitPane>
+    )
+}
+
+function ControlPanel(props: { actions: Actions; database: Database }) {
+    return (
+        <>
+            <RecoveryAlgorithms chosenRA={'ur'} />
+            <TransactionActions actions={props.actions} />
+            <TransactionLists
+                active={[...props.database.activeTransactions].sort().map(transaction => transaction.toString())}
+                consolidated={[...props.database.consolidatedTransactions]
+                    .sort()
+                    .map(transaction => transaction.toString())}
+                aborted={[...props.database.abortedTransactions].sort().map(transaction => transaction.toString())}
+            />
         </>
     )
 }
@@ -145,7 +141,7 @@ function TransactionActions(props: { actions: Actions }) {
             <div className='d-flex mx-2 mb-2'>
                 <button
                     type='button'
-                    className='btn btn-outline-success flex-fill m-2 w-25'
+                    className='btn btn-outline-success m-2 w-25'
                     disabled={!props.actions.start}
                     onClick={props.actions.start}
                 >
@@ -153,7 +149,7 @@ function TransactionActions(props: { actions: Actions }) {
                 </button>
                 <button
                     type='button'
-                    className='btn btn-outline-primary flex-fill m-2 w-25'
+                    className='btn btn-outline-primary m-2 w-25'
                     disabled={!props.actions.commit}
                     onClick={props.actions.commit}
                 >
@@ -161,7 +157,7 @@ function TransactionActions(props: { actions: Actions }) {
                 </button>
                 <button
                     type='button'
-                    className='btn btn-outline-danger flex-fill m-2 w-25'
+                    className='btn btn-outline-warning m-2 w-25'
                     disabled={!props.actions.abort}
                     onClick={props.actions.abort}
                 >
@@ -169,11 +165,11 @@ function TransactionActions(props: { actions: Actions }) {
                 </button>
                 <button
                     type='button'
-                    className='btn btn-outline-warning flex-fill m-2 w-25'
+                    className='btn btn-outline-danger  m-2 w-25'
                     disabled={!props.actions.restart}
                     onClick={props.actions.restart}
                 >
-                    Restart
+                    Restart (Fail)
                 </button>
             </div>
         </div>
