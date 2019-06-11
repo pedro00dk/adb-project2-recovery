@@ -37,6 +37,7 @@ export type DatabaseActions = {
     onCreate?: (path: Path, type: 'file' | 'folder') => void
     onDelete?: (path: Path) => void
     onRename?: (path: Path, name: string) => void
+    onWrite?: (path: Path, text: string) => void
 }
 
 const persistentFs: Node = {
@@ -135,7 +136,8 @@ export class Database {
                 onLoadPath: path => this.read(path),
                 onCreate: (path, type) => this.create(path, type),
                 onDelete: path => this.delete(path),
-                onRename: (path, name) => this.rename(path, name)
+                onRename: (path, name) => this.rename(path, name),
+                onWrite: (path, text) => this.write(path, text)
             },
             500
         )
@@ -204,7 +206,8 @@ export class Database {
                 onLoadPath: path => this.read(path),
                 onCreate: (path, type) => this.create(path, type),
                 onDelete: path => this.delete(path),
-                onRename: (path, name) => this.rename(path, name)
+                onRename: (path, name) => this.rename(path, name),
+                onWrite: (path, text) => this.write(path, text)
             },
             100
         )
@@ -243,7 +246,8 @@ export class Database {
                 onLoadPath: path => this.read(path),
                 onCreate: (path, type) => this.create(path, type),
                 onDelete: path => this.delete(path),
-                onRename: (path, name) => this.rename(path, name)
+                onRename: (path, name) => this.rename(path, name),
+                onWrite: (path, text) => this.write(path, text)
             },
             100
         )
@@ -280,7 +284,8 @@ export class Database {
                 onLoadPath: path => this.read(path),
                 onCreate: (path, type) => this.create(path, type),
                 onDelete: path => this.delete(path),
-                onRename: (path, name) => this.rename(path, name)
+                onRename: (path, name) => this.rename(path, name),
+                onWrite: (path, text) => this.write(path, text)
             },
             100
         )
@@ -308,19 +313,19 @@ export class Database {
             after: name
         })
 
-        const volatileElement = volatilePath[volatilePath.length - 1]
-        const previousName = volatileElement.name
+        const volatileNode = volatilePath[volatilePath.length - 1]
+        const previousName = volatileNode.name
 
-        volatileElement.name = name
+        volatileNode.name = name
         delete volatileParent.children[previousName]
-        volatileParent.children[name] = volatileElement
+        volatileParent.children[name] = volatileNode
 
         const persistentPath = this.getMirrorPath(this.persistentFs, volatilePath)
         const persistentParent = persistentPath[persistentPath.length - 2]
-        const persistentElement = persistentParent.children[previousName]
-        persistentElement.name = name
+        const persistentNode = persistentParent.children[previousName]
+        persistentNode.name = name
         delete persistentParent.children[previousName]
-        persistentParent.children[name] = persistentElement
+        persistentParent.children[name] = persistentNode
 
         await this.actionSetter(
             {
@@ -329,13 +334,52 @@ export class Database {
                 onLoadPath: path => this.read(path),
                 onCreate: (path, type) => this.create(path, type),
                 onDelete: path => this.delete(path),
-                onRename: (path, name) => this.rename(path, name)
+                onRename: (path, name) => this.rename(path, name),
+                onWrite: (path, text) => this.write(path, text)
             },
             100
         )
     }
 
-    write(volatilePath: Path, content: string) {}
+    async write(volatilePath: Path, text: string) {
+        const volatileNode = volatilePath[volatilePath.length - 1]
+        if (volatileNode.content === text) return
+
+        this.volatileJournal.push({
+            transaction: this.currentTransactionId.toString(),
+            timestamp: new Date(),
+            operation: 'wr',
+            object: volatilePath.map(node => node.name),
+            before: volatileNode.content,
+            after: text
+        })
+        this.persistentJournal.push({
+            transaction: this.currentTransactionId.toString(),
+            timestamp: new Date(),
+            operation: 'wr',
+            object: volatilePath.map(node => node.name),
+            before: volatileNode.content,
+            after: text
+        })
+
+        volatileNode.content = text
+        const persistentPath = this.getMirrorPath(this.persistentFs, volatilePath)
+        const persistentNode = persistentPath[persistentPath.length - 1]
+        persistentNode.content = text
+
+        await this.actionSetter(
+            {
+                onCommitTransaction: () => this.commit(),
+                onAbortTransaction: () => this.abort(),
+                onLoadPath: path => this.read(path),
+                onCreate: (path, type) => this.create(path, type),
+                onDelete: path => this.delete(path),
+                onRename: (path, name) => this.rename(path, name),
+                onWrite: (path, text) => this.write(path, text)
+            },
+            100
+        )
+    }
 
     restart() {}
 

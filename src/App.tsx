@@ -1,8 +1,9 @@
 import * as React from 'react'
+import { Editor } from './components/Editor'
 import { FileSystemTree } from './components/FileSystemTree'
 import { JournalTable } from './components/JournalTable'
 import { TransactionLists } from './components/TransactionLists'
-import { Database, DatabaseActions, Journal, Path } from './Database'
+import { Database, DatabaseActions, Journal, nodeIsFile, Path } from './Database'
 
 export function App() {
     const [availableActions, setAvailableActions] = React.useState<DatabaseActions>({})
@@ -12,6 +13,11 @@ export function App() {
                 (actions, wait) => new Promise(res => setTimeout(() => res(setAvailableActions(actions)), wait))
             )
     )
+
+    const [selectedNode, setSelectedNode] = React.useState<{ path: Path; location: 'persistent' | 'volatile' }>({
+        path: undefined,
+        location: undefined
+    })
 
     return (
         <div className='d-flex flex-column vw-100 vh-100'>
@@ -26,6 +32,11 @@ export function App() {
                         fsPrefix='persistent'
                         journal={database.persistentJournal}
                         onLoad={availableActions.onLoadPath}
+                        onClick={path =>
+                            nodeIsFile(path[path.length - 1])
+                                ? setSelectedNode({ path, location: 'persistent' })
+                                : setSelectedNode({ path: undefined, location: undefined })
+                        }
                     />
                 </div>
                 <div className='d-flex flex-column shadow m-2' style={{ width: '33.33%' }}>
@@ -37,6 +48,11 @@ export function App() {
                         onCreate={availableActions.onCreate}
                         onDelete={availableActions.onDelete}
                         onRename={availableActions.onRename}
+                        onClick={path =>
+                            nodeIsFile(path[path.length - 1])
+                                ? setSelectedNode({ path, location: 'volatile' })
+                                : setSelectedNode({ path: undefined, location: undefined })
+                        }
                     />
                 </div>
                 <div className='d-flex flex-column align-items-center shadow m-2' style={{ width: '33.33%' }}>
@@ -46,7 +62,18 @@ export function App() {
                         onCommitTransaction={availableActions.onCommitTransaction}
                         onAbortTransaction={availableActions.onAbortTransaction}
                     />
-                    <div className='flex-fill' />
+                    <div className='d-flex flex-column flex-fill w-100'>
+                        <h6 className='text-center p-1 mb-1 w-100'>Editor</h6>
+                        <Editor
+                            content={!!selectedNode.path ? selectedNode.path[selectedNode.path.length - 1].content : ''}
+                            editable={!!availableActions.onWrite && selectedNode.location === 'volatile'}
+                            onChange={text =>
+                                !!availableActions.onWrite
+                                    ? availableActions.onWrite(selectedNode.path, text)
+                                    : undefined
+                            }
+                        />
+                    </div>
                     <TransactionLists
                         active={[...database.activeTransactions].sort().map(transaction => transaction.toString())}
                         consolidated={[...database.consolidatedTransactions]
