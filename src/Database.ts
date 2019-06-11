@@ -1,4 +1,4 @@
-import { fs } from './components/mock'
+import { fs } from './mock'
 
 export type Node = {
     name: string
@@ -6,21 +6,27 @@ export type Node = {
     content?: string
 }
 
-export type Path = Node[]
+export type NodePath = Node[]
+export type StringPath = string[]
 
 export const nodeIsFile = (node: Node) => !node.children
 
-export const getPathString = (path: Path, prefix?: string) => {
-    const pathPrefix = prefix != undefined ? `${prefix}:` : ''
-    const basePath = path.map(part => part.name).join('/')
-    const folderSlash = path.length > 0 && nodeIsFile(path[path.length - 1]) ? '' : '/'
-    return `${pathPrefix}${basePath}${folderSlash}`
+export const fromNodePath = (nodePath: NodePath) => nodePath.map(node => node.name)
+
+export const fromStringPath = (stringPath: StringPath, root: Node) => {
+    const nodePath = [root]
+    stringPath.slice(1).forEach(name => nodePath.push(nodePath.slice(-1).pop().children[name]))
+    return nodePath
+}
+
+export const getPathname = (path: StringPath, prefix?: string) => {
+    return `${prefix != undefined ? `${prefix}:` : ''}${path.join('/')}`
 }
 
 export type Log = {
     transaction: string
     timestamp: Date
-    operation: 'stt' | 'fol' | 'fil' | 'rd' | 'wr' | 'del' | 'ren' /* | move */ | 'cmt' | 'abt' | 'chp'
+    operation: 'stt' | 'fol' | 'fil' | 'rd' | 'wr' | 'del' | 'ren' | 'cmt' | 'abt' | 'chp'
     object: string[]
     before?: string
     after?: string
@@ -30,16 +36,16 @@ export type Log = {
 
 export type Journal = Log[]
 
-export type DatabaseActions = {
-    onStartTransaction?: () => void
-    onCommitTransaction?: () => void
-    onAbortTransaction?: () => void
-    onRestart?: () => void
-    onLoadPath?: (path: Path) => void
-    onCreate?: (path: Path, type: 'file' | 'folder') => void
-    onDelete?: (path: Path) => void
-    onRename?: (path: Path, name: string) => void
-    onWrite?: (path: Path, text: string) => void
+export type Actions = {
+    start?: () => void
+    commit?: () => void
+    abort?: () => void
+    restart?: () => void
+    read?: (path: StringPath) => void
+    create?: (path: StringPath, type: 'file' | 'folder') => void
+    delete?: (path: StringPath) => void
+    rename?: (path: StringPath, name: string) => void
+    write?: (path: StringPath, text: string) => void
 }
 
 export class Database {
@@ -54,303 +60,218 @@ export class Database {
     //
     currentTransactionId: number = undefined
 
-    constructor(public actionSetter: (actions?: DatabaseActions, wait?: number) => Promise<void>) {
-        this.actionSetter({
-            onStartTransaction: () => this.start(),
-            onRestart: () => this.restart()
-        })
+    constructor(public setActions: (actions?: Actions, wait?: number) => Promise<void>) {
+        this.setActions(this.actions('start', 'restart'))
+    }
+
+    private actions(...selector: (keyof Actions)[]): Actions {
+        const actions: Actions = {
+            start: () => this.start(),
+            commit: () => this.commit(),
+            abort: () => this.abort(),
+            restart: () => this.restart(),
+            read: path => this.read(path),
+            write: (path, text) => this.write(path, text),
+            create: (path, type) => this.create(path, type),
+            delete: path => this.delete(path),
+            rename: (path, name) => this.rename(path, name)
+        }
+        return Object.fromEntries(Object.entries(actions).filter(entry => selector.includes(entry[0] as keyof Actions)))
     }
 
     private async start() {
         this.currentTransactionId = this.transactionIdGenerator++
-        this.volatileJournal.push({
-            transaction: this.currentTransactionId.toString(),
-            timestamp: new Date(),
-            operation: 'stt',
-            object: undefined
-        })
-        this.persistentJournal.push({
-            transaction: this.currentTransactionId.toString(),
-            timestamp: new Date(),
-            operation: 'stt',
-            object: undefined
-        })
-        this.activeTransactions.add(this.currentTransactionId)
-        await this.actionSetter(
-            {
-                onCommitTransaction: () => this.commit(),
-                onAbortTransaction: () => this.abort(),
-                onRestart: () => this.restart(),
-                onLoadPath: path => this.read(path),
-                onCreate: (path, type) => this.create(path, type),
-                onDelete: path => this.delete(path),
-                onRename: (path, name) => this.rename(path, name),
-                onWrite: (path, text) => this.write(path, text)
-            },
-            500
+        ;[this.volatileJournal, this.persistentJournal].forEach(journal =>
+            journal.push({
+                transaction: this.currentTransactionId.toString(),
+                timestamp: new Date(),
+                operation: 'stt',
+                object: []
+            })
         )
+        this.activeTransactions.add(this.currentTransactionId)
+
+        await this.setActions(this.actions('commit', 'abort', 'restart', 'read', 'write', 'create', 'delete', 'rename'))
     }
 
     private async commit() {
-        this.volatileJournal.push({
-            transaction: this.currentTransactionId.toString(),
-            timestamp: new Date(),
-            operation: 'cmt',
-            object: undefined
+        ;[this.volatileJournal, this.persistentJournal].forEach(journal => {
+            journal.push({
+                transaction: this.currentTransactionId.toString(),
+                timestamp: new Date(),
+                operation: 'cmt',
+                object: undefined
+            })
+            journal.push({
+                transaction: undefined,
+                timestamp: new Date(),
+                operation: 'chp',
+                object: undefined
+            })
         })
-        this.volatileJournal.push({
-            transaction: undefined,
-            timestamp: new Date(),
-            operation: 'chp',
-            object: undefined
-        })
-        this.persistentJournal.push({
-            transaction: this.currentTransactionId.toString(),
-            timestamp: new Date(),
-            operation: 'cmt',
-            object: undefined
-        })
-        this.persistentJournal.push({
-            transaction: undefined,
-            timestamp: new Date(),
-            operation: 'chp',
-            object: undefined
-        })
+
         this.consolidatedTransactions.add(this.currentTransactionId)
         this.activeTransactions.delete(this.currentTransactionId)
         this.currentTransactionId = undefined
-        await this.actionSetter(
-            {
-                onStartTransaction: () => this.start(),
-                onRestart: () => this.restart()
-            },
-            500
-        )
+
+        await this.setActions(this.actions('start', 'restart'))
     }
 
     private async abort() {
         // TODO undo operations
+
+        ;[this.volatileJournal, this.persistentJournal].forEach(journal => {
+            journal.push({
+                transaction: this.currentTransactionId.toString(),
+                timestamp: new Date(),
+                operation: 'abt',
+                object: undefined
+            })
+        })
+
         this.abortedTransactions.add(this.currentTransactionId)
         this.activeTransactions.delete(this.currentTransactionId)
         this.currentTransactionId = undefined
-        await this.actionSetter(
-            {
-                onStartTransaction: () => this.start(),
-                onRestart: () => this.restart()
-            },
-            500
-        )
+
+        await this.setActions(this.actions('start', 'restart'))
     }
 
-    private async read(persistentPath: Path) {
+    private async read(path: StringPath) {
+        const persistentPath = fromStringPath(path, this.persistentFs)
+
         let volatilePointer = this.volatileFs
         persistentPath.slice(1).forEach(node => {
             if (!volatilePointer.children[node.name])
                 volatilePointer.children[node.name] = nodeIsFile(node) ? { ...node } : { ...node, children: {} }
             volatilePointer = volatilePointer.children[node.name]
         })
-        await this.actionSetter(
-            {
-                onCommitTransaction: () => this.commit(),
-                onAbortTransaction: () => this.abort(),
-                onRestart: () => this.restart(),
-                onLoadPath: path => this.read(path),
-                onCreate: (path, type) => this.create(path, type),
-                onDelete: path => this.delete(path),
-                onRename: (path, name) => this.rename(path, name),
-                onWrite: (path, text) => this.write(path, text)
-            },
-            100
-        )
+
+        await this.setActions(this.actions('commit', 'abort', 'restart', 'read', 'write', 'create', 'delete', 'rename'))
     }
 
-    async create(volatilePath: Path, type: 'file' | 'folder') {
-        const volatileParent = volatilePath[volatilePath.length - 1]
+    async write(path: StringPath, text: string) {
+        const persistentPath = fromStringPath(path, this.persistentFs)
+        const volatilePath = fromStringPath(path, this.volatileFs)
+        const persistentNode = persistentPath.slice(-1).pop()
+        const volatileNode = volatilePath.slice(-1).pop()
 
-        let name: string = type
-        for (let i = 1; !!volatileParent.children[name]; i++) name = `${type} ${i}`
-
-        this.volatileJournal.push({
-            transaction: this.currentTransactionId.toString(),
-            timestamp: new Date(),
-            operation: type === 'file' ? 'fil' : 'fol',
-            object: volatilePath.map(node => node.name),
-            after: name
-        })
-        this.persistentJournal.push({
-            transaction: this.currentTransactionId.toString(),
-            timestamp: new Date(),
-            operation: type === 'file' ? 'fil' : 'fol',
-            object: volatilePath.map(node => node.name),
-            after: name
-        })
-
-        volatileParent.children[name] = type === 'file' ? { name, content: '' } : { name, children: {} }
-        const persistentPath = this.getMirrorPath(this.persistentFs, volatilePath)
-        const persistentParent = persistentPath[persistentPath.length - 1]
-        persistentParent.children[name] = type === 'file' ? { name, content: '' } : { name, children: {} }
-
-        await this.actionSetter(
-            {
-                onCommitTransaction: () => this.commit(),
-                onAbortTransaction: () => this.abort(),
-                onRestart: () => this.restart(),
-                onLoadPath: path => this.read(path),
-                onCreate: (path, type) => this.create(path, type),
-                onDelete: path => this.delete(path),
-                onRename: (path, name) => this.rename(path, name),
-                onWrite: (path, text) => this.write(path, text)
-            },
-            100
-        )
-    }
-
-    async delete(volatilePath: Path) {
-        const volatileParent = volatilePath[volatilePath.length - 2]
-        if (!volatileParent) {
-            // ignore operation, tried to delete root
-            return
-        }
-
-        this.volatileJournal.push({
-            transaction: this.currentTransactionId.toString(),
-            timestamp: new Date(),
-            operation: 'del',
-            object: volatilePath.map(node => node.name)
-        })
-        this.persistentJournal.push({
-            transaction: this.currentTransactionId.toString(),
-            timestamp: new Date(),
-            operation: 'del',
-            object: volatilePath.map(node => node.name)
-        })
-        const elementName = volatilePath[volatilePath.length - 1].name
-        delete volatileParent.children[elementName]
-        const persistentPath = this.getMirrorPath(this.persistentFs, volatilePath)
-        const persistentParent = persistentPath[persistentPath.length - 2]
-        delete persistentParent.children[elementName]
-
-        await this.actionSetter(
-            {
-                onCommitTransaction: () => this.commit(),
-                onAbortTransaction: () => this.abort(),
-                onRestart: () => this.restart(),
-                onLoadPath: path => this.read(path),
-                onCreate: (path, type) => this.create(path, type),
-                onDelete: path => this.delete(path),
-                onRename: (path, name) => this.rename(path, name),
-                onWrite: (path, text) => this.write(path, text)
-            },
-            100
-        )
-    }
-
-    async rename(volatilePath: Path, name: string) {
-        const volatileParent = volatilePath[volatilePath.length - 2]
-
-        const persistentPath = this.getMirrorPath(this.persistentFs, volatilePath)
-        const persistentParent = persistentPath[persistentPath.length - 2]
-
-        if (!volatileParent || !!persistentParent.children[name]) {
-            // ignore operation, name already exists or tried to rename root
-            return
-        }
-
-        this.volatileJournal.push({
-            transaction: this.currentTransactionId.toString(),
-            timestamp: new Date(),
-            operation: 'ren',
-            object: volatilePath.map(node => node.name),
-            after: name
-        })
-        this.persistentJournal.push({
-            transaction: this.currentTransactionId.toString(),
-            timestamp: new Date(),
-            operation: 'ren',
-            object: volatilePath.map(node => node.name),
-            after: name
-        })
-
-        const volatileNode = volatilePath[volatilePath.length - 1]
-        const previousName = volatileNode.name
-
-        volatileNode.name = name
-        delete volatileParent.children[previousName]
-        volatileParent.children[name] = volatileNode
-
-        const persistentNode = persistentParent.children[previousName]
-        persistentNode.name = name
-        delete persistentParent.children[previousName]
-        persistentParent.children[name] = persistentNode
-
-        await this.actionSetter(
-            {
-                onCommitTransaction: () => this.commit(),
-                onAbortTransaction: () => this.abort(),
-                onRestart: () => this.restart(),
-                onLoadPath: path => this.read(path),
-                onCreate: (path, type) => this.create(path, type),
-                onDelete: path => this.delete(path),
-                onRename: (path, name) => this.rename(path, name),
-                onWrite: (path, text) => this.write(path, text)
-            },
-            100
-        )
-    }
-
-    async write(volatilePath: Path, text: string) {
-        const volatileNode = volatilePath[volatilePath.length - 1]
-        if (volatileNode.content === text) return
-
-        this.volatileJournal.push({
-            transaction: this.currentTransactionId.toString(),
-            timestamp: new Date(),
-            operation: 'wr',
-            object: volatilePath.map(node => node.name),
-            before: volatileNode.content,
-            after: text
-        })
-        this.persistentJournal.push({
-            transaction: this.currentTransactionId.toString(),
-            timestamp: new Date(),
-            operation: 'wr',
-            object: volatilePath.map(node => node.name),
-            before: volatileNode.content,
-            after: text
+        if (volatileNode.content == undefined || volatileNode.content === text)
+            return //
+            //
+        ;[this.volatileJournal, this.persistentJournal].forEach(journal => {
+            journal.push({
+                transaction: this.currentTransactionId.toString(),
+                timestamp: new Date(),
+                operation: 'wr',
+                object: path,
+                before: volatileNode.content,
+                after: text
+            })
         })
 
         volatileNode.content = text
-        const persistentPath = this.getMirrorPath(this.persistentFs, volatilePath)
-        const persistentNode = persistentPath[persistentPath.length - 1]
         persistentNode.content = text
 
-        await this.actionSetter(
-            {
-                onCommitTransaction: () => this.commit(),
-                onAbortTransaction: () => this.abort(),
-                onRestart: () => this.restart(),
-                onLoadPath: path => this.read(path),
-                onCreate: (path, type) => this.create(path, type),
-                onDelete: path => this.delete(path),
-                onRename: (path, name) => this.rename(path, name),
-                onWrite: (path, text) => this.write(path, text)
-            },
-            100
-        )
+        await this.setActions(this.actions('commit', 'abort', 'restart', 'read', 'write', 'create', 'delete', 'rename'))
+    }
+
+    async create(path: StringPath, type: 'file' | 'folder') {
+        const persistentPath = fromStringPath(path, this.persistentFs)
+        const volatilePath = fromStringPath(path, this.volatileFs)
+        const persistentNode = persistentPath.slice(-1).pop()
+        const volatileNode = volatilePath.slice(-1).pop()
+
+        let name: string = type
+        for (let i = 1; !!persistentNode.children[name] && !!volatileNode.children[name]; i++)
+            name = `${type} ${i}`
+            //
+        ;[this.volatileJournal, this.persistentJournal].forEach(journal => {
+            journal.push({
+                transaction: this.currentTransactionId.toString(),
+                timestamp: new Date(),
+                operation: type === 'file' ? 'fil' : 'fol',
+                object: volatilePath.map(node => node.name),
+                after: name
+            })
+        })
+
+        volatileNode.children[name] = type === 'file' ? { name, content: '' } : { name, children: {} }
+        persistentNode.children[name] = type === 'file' ? { name, content: '' } : { name, children: {} }
+
+        await this.setActions(this.actions('commit', 'abort', 'restart', 'read', 'write', 'create', 'delete', 'rename'))
+    }
+
+    async delete(path: StringPath) {
+        const persistentPath = fromStringPath(path, this.persistentFs)
+        const volatilePath = fromStringPath(path, this.volatileFs)
+        const persistentParent = persistentPath.slice(-2, -1).pop()
+        const volatileParent = volatilePath.slice(-2, -1).pop()
+
+        if (!volatileParent)
+            // ignore operation, tried to delete root
+            return //
+            //
+        ;[this.volatileJournal, this.persistentJournal].forEach(journal => {
+            journal.push({
+                transaction: this.currentTransactionId.toString(),
+                timestamp: new Date(),
+                operation: 'del',
+                object: volatilePath.map(node => node.name)
+            })
+        })
+
+        const nodeName = path.slice(-1).pop()
+        delete volatileParent.children[nodeName]
+        delete persistentParent.children[nodeName]
+
+        await this.setActions(this.actions('commit', 'abort', 'restart', 'read', 'write', 'create', 'delete', 'rename'))
+    }
+
+    async rename(path: StringPath, name: string) {
+        const persistentPath = fromStringPath(path, this.persistentFs)
+        const volatilePath = fromStringPath(path, this.volatileFs)
+        const persistentNode = persistentPath.slice(-1).pop()
+        const volatileNode = volatilePath.slice(-1).pop()
+        const persistentParent = persistentPath.slice(-2, -1).pop()
+        const volatileParent = volatilePath.slice(-2, -1).pop()
+
+        if (!volatileParent || !!volatileParent.children[name] || !!persistentParent.children[name])
+            // ignore operation, name already exists or tried to rename root
+            return //
+            //
+        ;[this.volatileJournal, this.persistentJournal].forEach(journal => {
+            journal.push({
+                transaction: this.currentTransactionId.toString(),
+                timestamp: new Date(),
+                operation: 'ren',
+                object: volatilePath.map(node => node.name),
+                after: name
+            })
+        })
+
+        const nodeName = path.slice(-1).pop()
+
+        volatileNode.name = name
+        delete volatileParent.children[nodeName]
+        volatileParent.children[name] = volatileNode
+
+        delete persistentParent.children[nodeName]
+        persistentNode.name = name
+        persistentParent.children[name] = persistentNode
+
+        await this.setActions(this.actions('commit', 'abort', 'restart', 'read', 'write', 'create', 'delete', 'rename'))
     }
 
     restart() {
         this.volatileFs = { name: 'fs', children: {} }
         this.volatileJournal = []
-        this.actionSetter({
-            onStartTransaction: () => this.start(),
-            onRestart: () => this.restart()
-        })
+
+        this.setActions(this.actions('start', 'restart'))
     }
 
     // checkpoint() {}
 
-    getMirrorPath(root: Node, path: Path) {
+    getMirrorPath(root: Node, path: NodePath) {
         const mirrorPath = [root]
         path.slice(1).forEach(node => {
             const lastNode = mirrorPath[mirrorPath.length - 1]

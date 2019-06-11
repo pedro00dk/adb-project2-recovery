@@ -3,19 +3,21 @@ import { Editor } from './components/Editor'
 import { FileSystemTree } from './components/FileSystemTree'
 import { JournalTable } from './components/JournalTable'
 import { TransactionLists } from './components/TransactionLists'
-import { Database, DatabaseActions, Journal, nodeIsFile, Path } from './Database'
+import { Actions, Database, Journal, Node, nodeIsFile, NodePath, StringPath } from './Database'
 
 export function App() {
-    const [availableActions, setAvailableActions] = React.useState<DatabaseActions>({})
+    const [actions, setActions] = React.useState<Actions>({})
     const [database, setDatabase] = React.useState(
-        () =>
-            new Database(
-                (actions, wait) => new Promise(res => setTimeout(() => res(setAvailableActions(actions)), wait))
-            )
+        () => new Database((actions, wait) => new Promise(res => setTimeout(() => res(setActions(actions)), wait)))
     )
 
-    const [selectedNode, setSelectedNode] = React.useState<{ path: Path; location: 'persistent' | 'volatile' }>({
+    const [clickedNode, setClickedNode] = React.useState<{
+        path: StringPath
+        node: Node
+        location: 'persistent' | 'volatile'
+    }>({
         path: undefined,
+        node: undefined,
         location: undefined
     })
 
@@ -31,11 +33,17 @@ export function App() {
                         fs={[database.persistentFs]}
                         fsPrefix='persistent'
                         journal={database.persistentJournal}
-                        onLoad={availableActions.onLoadPath}
-                        onClick={path =>
-                            nodeIsFile(path[path.length - 1])
-                                ? setSelectedNode({ path, location: 'persistent' })
-                                : setSelectedNode({ path: undefined, location: undefined })
+                        actions={{
+                            ...actions,
+                            write: undefined,
+                            create: undefined,
+                            delete: undefined,
+                            rename: undefined
+                        }}
+                        click={(path, node) =>
+                            nodeIsFile(node)
+                                ? setClickedNode({ path, node, location: 'persistent' })
+                                : setClickedNode({ path: undefined, node: undefined, location: undefined })
                         }
                     />
                 </div>
@@ -45,34 +53,23 @@ export function App() {
                         fs={[database.volatileFs]}
                         fsPrefix='volatile'
                         journal={database.volatileJournal}
-                        onCreate={availableActions.onCreate}
-                        onDelete={availableActions.onDelete}
-                        onRename={availableActions.onRename}
-                        onClick={path =>
-                            nodeIsFile(path[path.length - 1])
-                                ? setSelectedNode({ path, location: 'volatile' })
-                                : setSelectedNode({ path: undefined, location: undefined })
+                        actions={{ ...actions, read: undefined }}
+                        click={(path, node) =>
+                            nodeIsFile(node)
+                                ? setClickedNode({ path, node, location: 'volatile' })
+                                : setClickedNode({ path: undefined, node: undefined, location: undefined })
                         }
                     />
                 </div>
                 <div className='d-flex flex-column align-items-center shadow m-2' style={{ width: '33.33%' }}>
                     <RecoveryAlgorithms chosenRA={'ur'} />
-                    <TransactionActions
-                        onStartTransaction={availableActions.onStartTransaction}
-                        onCommitTransaction={availableActions.onCommitTransaction}
-                        onAbortTransaction={availableActions.onAbortTransaction}
-                        onRestart={availableActions.onRestart}
-                    />
+                    <TransactionActions actions={actions} />
                     <div className='d-flex flex-column flex-fill w-100'>
                         <h6 className='text-center p-1 mb-1 w-100'>Editor</h6>
                         <Editor
-                            content={!!selectedNode.path ? selectedNode.path[selectedNode.path.length - 1].content : ''}
-                            editable={!!availableActions.onWrite && selectedNode.location === 'volatile'}
-                            onChange={text =>
-                                !!availableActions.onWrite
-                                    ? availableActions.onWrite(selectedNode.path, text)
-                                    : undefined
-                            }
+                            content={!!clickedNode.path ? clickedNode.node.content : ''}
+                            editable={!!actions.write && clickedNode.location === 'volatile'}
+                            onChange={text => (!!actions.write ? actions.write(clickedNode.path, text) : undefined)}
                         />
                     </div>
                     <TransactionLists
@@ -89,28 +86,17 @@ export function App() {
 }
 
 function FileSystemJournal(props: {
-    fs: Path
+    fs: NodePath
     fsPrefix: string
     journal: Journal
-    onClick?: (path: Path) => void
-    onLoad?: (path: Path) => void
-    onCreate?: (path: Path, type: 'file' | 'folder') => void
-    onDelete?: (path: Path) => void
-    onRename?: (path: Path, name: string) => void
+    actions: Actions
+    click?: (path: StringPath, node: Node) => void
 }) {
     return (
         <>
             <div className='d-flex flex-column shadow-sm mb-2 w-100' style={{ height: '30%' }}>
                 <h6 className='text-center p-1 mb-1 w-100'>File System</h6>
-                <FileSystemTree
-                    fs={props.fs}
-                    fsPrefix={props.fsPrefix}
-                    onClick={props.onClick}
-                    onLoad={props.onLoad}
-                    onCreate={props.onCreate}
-                    onDelete={props.onDelete}
-                    onRename={props.onRename}
-                />
+                <FileSystemTree fs={props.fs} fsPrefix={props.fsPrefix} actions={props.actions} click={props.click} />
             </div>
             <div className='d-flex flex-column flex-fill w-100'>
                 <h6 className='text-center p-1 mb-1 w-100'>Journal</h6>
@@ -168,12 +154,7 @@ function RecoveryAlgorithms(props: { chosenRA: string; onChooseRA?: (algorithm: 
     )
 }
 
-function TransactionActions(props: {
-    onStartTransaction?: () => void
-    onCommitTransaction?: () => void
-    onAbortTransaction?: () => void
-    onRestart?: () => void
-}) {
+function TransactionActions(props: { actions: Actions }) {
     return (
         <div className='d-flex flex-column shadow-sm m-2 w-100'>
             <h6 className='text-center p-2 mb-1'>Transaction Actions</h6>
@@ -181,32 +162,32 @@ function TransactionActions(props: {
                 <button
                     type='button'
                     className='btn btn-outline-success flex-fill m-2 w-25'
-                    disabled={!props.onStartTransaction}
-                    onClick={props.onStartTransaction}
+                    disabled={!props.actions.start}
+                    onClick={props.actions.start}
                 >
                     Start Transaction
                 </button>
                 <button
                     type='button'
                     className='btn btn-outline-primary flex-fill m-2 w-25'
-                    disabled={!props.onCommitTransaction}
-                    onClick={props.onCommitTransaction}
+                    disabled={!props.actions.commit}
+                    onClick={props.actions.commit}
                 >
                     Commit Transaction
                 </button>
                 <button
                     type='button'
                     className='btn btn-outline-danger flex-fill m-2 w-25'
-                    disabled={!props.onAbortTransaction}
-                    onClick={props.onAbortTransaction}
+                    disabled={!props.actions.abort}
+                    onClick={props.actions.abort}
                 >
                     Abort Transaction
                 </button>
                 <button
                     type='button'
                     className='btn btn-outline-warning flex-fill m-2 w-25'
-                    disabled={!props.onRestart}
-                    onClick={props.onRestart}
+                    disabled={!props.actions.restart}
+                    onClick={props.actions.restart}
                 >
                     Restart
                 </button>

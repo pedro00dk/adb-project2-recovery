@@ -1,7 +1,7 @@
 import * as ace from 'brace'
 import * as React from 'react'
 
-export function Editor(props: { editable: boolean; content: string; onChange: (text: string) => void }) {
+export function Editor(props: { content: string; editable: boolean; onChange: (text: string) => void }) {
     const ref = React.useRef<HTMLDivElement>()
     const [editor, setEditor] = React.useState<ace.Editor>()
 
