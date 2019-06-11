@@ -61,6 +61,7 @@ export function App() {
                         onStartTransaction={availableActions.onStartTransaction}
                         onCommitTransaction={availableActions.onCommitTransaction}
                         onAbortTransaction={availableActions.onAbortTransaction}
+                        onRestart={availableActions.onRestart}
                     />
                     <div className='d-flex flex-column flex-fill w-100'>
                         <h6 className='text-center p-1 mb-1 w-100'>Editor</h6>
@@ -171,7 +172,7 @@ function TransactionActions(props: {
     onStartTransaction?: () => void
     onCommitTransaction?: () => void
     onAbortTransaction?: () => void
-    onManualGc?: () => void
+    onRestart?: () => void
 }) {
     return (
         <div className='d-flex flex-column shadow-sm m-2 w-100'>
@@ -204,10 +205,10 @@ function TransactionActions(props: {
                 <button
                     type='button'
                     className='btn btn-outline-warning flex-fill m-2 w-25'
-                    disabled={!props.onManualGc}
-                    onClick={props.onManualGc}
+                    disabled={!props.onRestart}
+                    onClick={props.onRestart}
                 >
-                    Manual GC
+                    Restart
                 </button>
             </div>
         </div>

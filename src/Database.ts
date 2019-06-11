@@ -1,3 +1,5 @@
+import { fs } from './components/mock'
+
 export type Node = {
     name: string
     children?: { [name: string]: Node }
@@ -32,7 +34,7 @@ export type DatabaseActions = {
     onStartTransaction?: () => void
     onCommitTransaction?: () => void
     onAbortTransaction?: () => void
-    onManualGc?: () => void
+    onRestart?: () => void
     onLoadPath?: (path: Path) => void
     onCreate?: (path: Path, type: 'file' | 'folder') => void
     onDelete?: (path: Path) => void
@@ -40,64 +42,8 @@ export type DatabaseActions = {
     onWrite?: (path: Path, text: string) => void
 }
 
-const persistentFs: Node = {
-    name: 'fs',
-    children: {
-        elisa: {
-            name: 'elisa',
-            children: {
-                file0: { name: 'file0', content: 'contents of file0' },
-                file1: { name: 'file1', content: 'contents of file1' },
-                file2: { name: 'file2', content: 'contents of file2' },
-                file3: { name: 'file3', content: 'contents of file3' },
-                file4: { name: 'file4', content: 'contents of file4' }
-            }
-        },
-        jailton: {
-            name: 'jailton',
-            children: {
-                file0: { name: 'file0', content: 'contents of file0' },
-                file1: { name: 'file1', content: 'contents of file1' },
-                file2: { name: 'file2', content: 'contents of file2' },
-                file3: { name: 'file3', content: 'contents of file3' },
-                file4: { name: 'file4', content: 'contents of file4' }
-            }
-        },
-        karine: {
-            name: 'karine',
-            children: {
-                file0: { name: 'file0', content: 'contents of file0' },
-                file1: { name: 'file1', content: 'contents of file1' },
-                file2: { name: 'file2', content: 'contents of file2' },
-                file3: { name: 'file3', content: 'contents of file3' },
-                file4: { name: 'file4', content: 'contents of file4' }
-            }
-        },
-        pedro: {
-            name: 'pedro',
-            children: {
-                file0: { name: 'file0', content: 'contents of file0' },
-                file1: { name: 'file1', content: 'contents of file1' },
-                file2: { name: 'file2', content: 'contents of file2' },
-                file3: { name: 'file3', content: 'contents of file3' },
-                file4: { name: 'file4', content: 'contents of file4' }
-            }
-        },
-        thay: {
-            name: 'thay',
-            children: {
-                file0: { name: 'file0', content: 'contents of file0' },
-                file1: { name: 'file1', content: 'contents of file1' },
-                file2: { name: 'file2', content: 'contents of file2' },
-                file3: { name: 'file3', content: 'contents of file3' },
-                file4: { name: 'file4', content: 'contents of file4' }
-            }
-        }
-    }
-}
-
 export class Database {
-    persistentFs: Node = persistentFs
+    persistentFs: Node = fs
     persistentJournal: Journal = []
     volatileFs: Node = { name: 'fs', children: {} }
     volatileJournal: Journal = []
@@ -110,7 +56,8 @@ export class Database {
 
     constructor(public actionSetter: (actions?: DatabaseActions, wait?: number) => Promise<void>) {
         this.actionSetter({
-            onStartTransaction: () => this.start()
+            onStartTransaction: () => this.start(),
+            onRestart: () => this.restart()
         })
     }
 
@@ -133,6 +80,7 @@ export class Database {
             {
                 onCommitTransaction: () => this.commit(),
                 onAbortTransaction: () => this.abort(),
+                onRestart: () => this.restart(),
                 onLoadPath: path => this.read(path),
                 onCreate: (path, type) => this.create(path, type),
                 onDelete: path => this.delete(path),
@@ -173,7 +121,8 @@ export class Database {
         this.currentTransactionId = undefined
         await this.actionSetter(
             {
-                onStartTransaction: () => this.start()
+                onStartTransaction: () => this.start(),
+                onRestart: () => this.restart()
             },
             500
         )
@@ -186,7 +135,8 @@ export class Database {
         this.currentTransactionId = undefined
         await this.actionSetter(
             {
-                onStartTransaction: () => this.start()
+                onStartTransaction: () => this.start(),
+                onRestart: () => this.restart()
             },
             500
         )
@@ -203,6 +153,7 @@ export class Database {
             {
                 onCommitTransaction: () => this.commit(),
                 onAbortTransaction: () => this.abort(),
+                onRestart: () => this.restart(),
                 onLoadPath: path => this.read(path),
                 onCreate: (path, type) => this.create(path, type),
                 onDelete: path => this.delete(path),
@@ -243,6 +194,7 @@ export class Database {
             {
                 onCommitTransaction: () => this.commit(),
                 onAbortTransaction: () => this.abort(),
+                onRestart: () => this.restart(),
                 onLoadPath: path => this.read(path),
                 onCreate: (path, type) => this.create(path, type),
                 onDelete: path => this.delete(path),
@@ -256,7 +208,8 @@ export class Database {
     async delete(volatilePath: Path) {
         const volatileParent = volatilePath[volatilePath.length - 2]
         if (!volatileParent) {
-            // abort transaction, tried to delete root
+            // ignore operation, tried to delete root
+            return
         }
 
         this.volatileJournal.push({
@@ -281,6 +234,7 @@ export class Database {
             {
                 onCommitTransaction: () => this.commit(),
                 onAbortTransaction: () => this.abort(),
+                onRestart: () => this.restart(),
                 onLoadPath: path => this.read(path),
                 onCreate: (path, type) => this.create(path, type),
                 onDelete: path => this.delete(path),
@@ -294,8 +248,12 @@ export class Database {
     async rename(volatilePath: Path, name: string) {
         const volatileParent = volatilePath[volatilePath.length - 2]
 
-        if (!!volatileParent.children[name]) {
-            // abort transaction, name already exists
+        const persistentPath = this.getMirrorPath(this.persistentFs, volatilePath)
+        const persistentParent = persistentPath[persistentPath.length - 2]
+
+        if (!volatileParent || !!persistentParent.children[name]) {
+            // ignore operation, name already exists or tried to rename root
+            return
         }
 
         this.volatileJournal.push({
@@ -320,8 +278,6 @@ export class Database {
         delete volatileParent.children[previousName]
         volatileParent.children[name] = volatileNode
 
-        const persistentPath = this.getMirrorPath(this.persistentFs, volatilePath)
-        const persistentParent = persistentPath[persistentPath.length - 2]
         const persistentNode = persistentParent.children[previousName]
         persistentNode.name = name
         delete persistentParent.children[previousName]
@@ -331,6 +287,7 @@ export class Database {
             {
                 onCommitTransaction: () => this.commit(),
                 onAbortTransaction: () => this.abort(),
+                onRestart: () => this.restart(),
                 onLoadPath: path => this.read(path),
                 onCreate: (path, type) => this.create(path, type),
                 onDelete: path => this.delete(path),
@@ -371,6 +328,7 @@ export class Database {
             {
                 onCommitTransaction: () => this.commit(),
                 onAbortTransaction: () => this.abort(),
+                onRestart: () => this.restart(),
                 onLoadPath: path => this.read(path),
                 onCreate: (path, type) => this.create(path, type),
                 onDelete: path => this.delete(path),
@@ -381,7 +339,14 @@ export class Database {
         )
     }
 
-    restart() {}
+    restart() {
+        this.volatileFs = { name: 'fs', children: {} }
+        this.volatileJournal = []
+        this.actionSetter({
+            onStartTransaction: () => this.start(),
+            onRestart: () => this.restart()
+        })
+    }
 
     // checkpoint() {}
 
