@@ -23,6 +23,17 @@ export const getPathname = (path: StringPath, prefix?: string) => {
     return `${prefix != undefined ? `${prefix}:` : ''}${path.join('/')}`
 }
 
+export const nodeSorter = (nodeA: Node, nodeB: Node) =>
+    !!nodeA.children && !nodeB.children
+        ? -1
+        : !nodeA.children && !!nodeB.children
+        ? 1
+        : nodeA.name < nodeB.name
+        ? -1
+        : nodeA.name > nodeB.name
+        ? 1
+        : 0
+
 export type Log = {
     transaction: string
     timestamp: Date

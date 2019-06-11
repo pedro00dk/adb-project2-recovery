@@ -30,7 +30,7 @@ export function App() {
                 <div className='d-flex flex-column shadow m-2' style={{ width: '33.33%' }}>
                     <h5 className='text-center shadow-sm p-2 mb-2 w-100'>PERSISTENT DATA</h5>
                     <FileSystemJournal
-                        fs={[database.persistentFs]}
+                        fs={database.persistentFs}
                         prefix='persistent'
                         journal={database.persistentJournal}
                         actions={{
@@ -40,25 +40,15 @@ export function App() {
                             delete: undefined,
                             rename: undefined
                         }}
-                        click={(path, node) =>
-                            nodeIsFile(node)
-                                ? setClickedNode({ path, node, location: 'persistent' })
-                                : setClickedNode({ path: undefined, node: undefined, location: undefined })
-                        }
                     />
                 </div>
                 <div className='d-flex flex-column shadow m-2' style={{ width: '33.33%' }}>
                     <h5 className='text-center shadow-sm p-2 mb-2 w-100'>VOLATILE DATA</h5>
                     <FileSystemJournal
-                        fs={[database.volatileFs]}
+                        fs={database.volatileFs}
                         prefix='volatile'
                         journal={database.volatileJournal}
                         actions={{ ...actions, read: undefined }}
-                        click={(path, node) =>
-                            nodeIsFile(node)
-                                ? setClickedNode({ path, node, location: 'volatile' })
-                                : setClickedNode({ path: undefined, node: undefined, location: undefined })
-                        }
                     />
                 </div>
                 <div className='d-flex flex-column align-items-center shadow m-2' style={{ width: '33.33%' }}>
@@ -85,18 +75,12 @@ export function App() {
     )
 }
 
-function FileSystemJournal(props: {
-    fs: NodePath
-    prefix: string
-    journal: Journal
-    actions: Actions
-    click?: (path: StringPath, node: Node) => void
-}) {
+function FileSystemJournal(props: { fs: Node; prefix: string; journal: Journal; actions: Actions }) {
     return (
         <>
             <div className='d-flex flex-column shadow-sm mb-2 w-100' style={{ height: '30%' }}>
                 <h6 className='text-center p-1 mb-1 w-100'>File System</h6>
-                <FileSystemTree fs={props.fs} prefix={props.prefix} actions={props.actions} click={props.click} />
+                <FileSystemTree fs={props.fs} prefix={props.prefix} actions={props.actions} />
             </div>
             <div className='d-flex flex-column flex-fill w-100'>
                 <h6 className='text-center p-1 mb-1 w-100'>Journal</h6>

@@ -1,30 +1,45 @@
 import * as React from 'react'
 import { Item, Menu, MenuProvider, Submenu } from 'react-contexify'
-import { Actions, fromNodePath, getPathname, Node, nodeIsFile, NodePath, StringPath } from '../Database'
+import { Actions, fromNodePath, getPathname, Node, nodeIsFile, NodePath, nodeSorter, StringPath } from '../Database'
 
 import 'react-contexify/dist/ReactContexify.min.css'
 
-export function FileSystemTree(props: {
-    fs: NodePath
-    prefix: string
-    actions: Actions
-    click?: (path: StringPath, node: Node) => void
-}) {
+export function FileSystemTree(props: { fs: Node; prefix: string; actions: Actions }) {
+    const stringPath = fromNodePath([props.fs])
+    const pathname = getPathname(stringPath, props.prefix)
+
     return (
-        <div className='d-flex overflow-auto p-2 w-100 h-100'>
-            <ul className='pl-0' style={{ listStyleType: 'none' }}>
-                <FileSystemNode path={props.fs} prefix={props.prefix} actions={props.actions} click={props.click} />
-            </ul>
-        </div>
+        <>
+            <MenuProvider className='d-flex overflow-auto p-2 w-100 h-100' id={pathname}>
+                <ul className='pl-0' style={{ listStyleType: 'none' }}>
+                    {Object.entries(props.fs.children)
+                        .sort(([, nodeA], [, nodeB]) => nodeSorter(nodeA, nodeB))
+                        .map(([, node], i) => {
+                            return (
+                                <FileSystemNode
+                                    key={i}
+                                    path={[props.fs, node]}
+                                    prefix={props.prefix}
+                                    actions={props.actions}
+                                />
+                            )
+                        })}
+                </ul>
+            </MenuProvider>
+            <Menu id={pathname}>
+                {!!props.actions.read && <Item onClick={() => props.actions.read(stringPath)}>read</Item>}
+                {!!props.actions.create && (
+                    <Submenu label='create'>
+                        <Item onClick={() => props.actions.create(stringPath, 'file')}>file</Item>
+                        <Item onClick={() => props.actions.create(stringPath, 'folder')}>folder</Item>
+                    </Submenu>
+                )}
+            </Menu>
+        </>
     )
 }
 
-function FileSystemNode(props: {
-    path: NodePath
-    prefix: string
-    actions: Actions
-    click?: (path: StringPath, node: Node) => void
-}) {
+function FileSystemNode(props: { path: NodePath; prefix: string; actions: Actions }) {
     const [write, setWrite] = React.useState(false)
     const [rename, setRename] = React.useState(false)
     const node = props.path.slice(-1).pop()
