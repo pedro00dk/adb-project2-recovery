@@ -1,62 +1,18 @@
 import * as React from 'react'
-import { FileSystemTree, Folder, Path } from './components/FileSystemTree'
-import { Journal, JournalTable } from './components/JournalTable'
-import { TransactionLists } from './components/TransactionActions'
-
-const fsMock: Folder = {
-    name: 'home',
-    children: [
-        {
-            name: 'pedro',
-            children: [
-                { name: 'documents', children: [{ name: 'file', content: 'content of a file' }] },
-                {
-                    name: 'pictures',
-                    children: [
-                        { name: 'file1', content: 'content of a file' }
-                        //         { name: 'file3', content: 'content of a file' },
-                        //         { name: 'file4', children: [] },
-                        //         { name: 'file5', content: 'content of a file' },
-                        //         { name: 'file', content: 'content of a file' },
-                        //         { name: 'file3', content: 'content of a file' },
-                        //         { name: 'file4', children: [] },
-                        //         { name: 'file5', content: 'content of a file' },
-                        //         { name: 'file', content: 'content of a file' },
-                        //         { name: 'file3', content: 'content of a file' },
-                        //         { name: 'file4', children: [] },
-                        //         { name: 'file5', content: 'content of a file' },
-                        //         { name: 'file', content: 'content of a file' },
-                        //         { name: 'file3', content: 'content of a file' },
-                        //         { name: 'file4', children: [] },
-                        //         { name: 'file5', content: 'content of a file' },
-                        //         { name: 'file', content: 'content of a file' },
-                        //         { name: 'file6', content: 'content of a file' }
-                    ]
-                }
-            ]
-        }
-    ]
-}
-
-const journalMock: Journal = [
-    { transaction: '12', timestamp: new Date(), operation: 'srt' },
-    { transaction: '12', timestamp: new Date(), operation: 'fol', object: ['home', 'pedro'], after: 'documents' },
-    { transaction: '12', timestamp: new Date(), operation: 'fil', object: ['home', 'pedro', 'docs'], after: 'file' },
-    { transaction: '12', timestamp: new Date(), operation: 'cmt' },
-    { transaction: undefined, timestamp: new Date(), operation: 'chp', object: ['12'] },
-    { transaction: '12', timestamp: new Date(), operation: 'srt' },
-    { transaction: '12', timestamp: new Date(), operation: 'fol', object: ['home', 'pedro'], after: 'documents' },
-    { transaction: '12', timestamp: new Date(), operation: 'fil', object: ['home', 'pedro', 'docs'], after: 'file' },
-    { transaction: '12', timestamp: new Date(), operation: 'cmt' },
-    { transaction: undefined, timestamp: new Date(), operation: 'chp', object: ['12'] },
-    { transaction: '12', timestamp: new Date(), operation: 'srt' },
-    { transaction: '12', timestamp: new Date(), operation: 'fol', object: ['home', 'pedro'], after: 'documents' },
-    { transaction: '12', timestamp: new Date(), operation: 'fil', object: ['home', 'pedro', 'docs'], after: 'file' },
-    { transaction: '12', timestamp: new Date(), operation: 'cmt' },
-    { transaction: undefined, timestamp: new Date(), operation: 'chp', object: ['12'] }
-]
+import { FileSystemTree } from './components/FileSystemTree'
+import { JournalTable } from './components/JournalTable'
+import { TransactionLists } from './components/TransactionLists'
+import { Database, DatabaseActions, Journal, Path } from './Database'
 
 export function App() {
+    const [availableActions, setAvailableActions] = React.useState<DatabaseActions>({})
+    const [database, setDatabase] = React.useState(
+        () =>
+            new Database(
+                (actions, wait) => new Promise(res => setTimeout(() => res(setAvailableActions(actions)), wait))
+            )
+    )
+
     return (
         <div className='d-flex flex-column vw-100 vh-100'>
             <nav className='navbar navbar-light bg-light'>
@@ -65,17 +21,39 @@ export function App() {
             <div className='d-flex flex-fill'>
                 <div className='d-flex flex-column shadow m-2' style={{ width: '33.33%' }}>
                     <h5 className='text-center shadow-sm p-2 mb-2 w-100'>PERSISTENT DATA</h5>
-                    <FileSystemJournal fs={fsMock} fsPrefix='disk' journal={journalMock} />
+                    <FileSystemJournal
+                        fs={[database.persistentFs]}
+                        fsPrefix='persistent'
+                        journal={database.persistentJournal}
+                        onLoad={availableActions.onLoadPath}
+                    />
                 </div>
                 <div className='d-flex flex-column shadow m-2' style={{ width: '33.33%' }}>
                     <h5 className='text-center shadow-sm p-2 mb-2 w-100'>VOLATILE DATA</h5>
-                    <FileSystemJournal fs={fsMock} fsPrefix='mem' journal={journalMock} />
+                    <FileSystemJournal
+                        fs={[database.volatileFs]}
+                        fsPrefix='volatile'
+                        journal={database.volatileJournal}
+                        onCreate={availableActions.onCreate}
+                        onDelete={availableActions.onDelete}
+                        onRename={availableActions.onRename}
+                    />
                 </div>
                 <div className='d-flex flex-column align-items-center shadow m-2' style={{ width: '33.33%' }}>
-                    <RecoveryAlgorithms chosenRA={''} />
-                    <TransactionActions onStartTransaction={() => undefined} />
+                    <RecoveryAlgorithms chosenRA={'ur'} />
+                    <TransactionActions
+                        onStartTransaction={availableActions.onStartTransaction}
+                        onCommitTransaction={availableActions.onCommitTransaction}
+                        onAbortTransaction={availableActions.onAbortTransaction}
+                    />
                     <div className='flex-fill' />
-                    <TransactionLists active={['12', '13', '25']} aborted={['16']} consolidated={['8']} />
+                    <TransactionLists
+                        active={[...database.activeTransactions].sort().map(transaction => transaction.toString())}
+                        consolidated={[...database.consolidatedTransactions]
+                            .sort()
+                            .map(transaction => transaction.toString())}
+                        aborted={[...database.abortedTransactions].sort().map(transaction => transaction.toString())}
+                    />
                 </div>
             </div>
         </div>
@@ -83,7 +61,7 @@ export function App() {
 }
 
 function FileSystemJournal(props: {
-    fs: Folder
+    fs: Path
     fsPrefix: string
     journal: Journal
     onClick?: (path: Path) => void

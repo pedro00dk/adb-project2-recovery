@@ -1,23 +1,11 @@
 import * as React from 'react'
-
-export type Log = {
-    transaction: string
-    timestamp: Date
-    operation: 'srt' | 'fol' | 'fil' | 'rd' | 'wr' | 'del' | 'ren' /* | move */ | 'cmt' | 'abt' | 'chp'
-    object?: string[]
-    before?: string
-    after?: string
-    prevTrOp?: number
-    nextTrOp?: number
-}
-
-export type Journal = Log[]
+import { Journal } from '../Database'
 
 export function JournalTable(props: { journal: Journal }) {
     const journal = [...props.journal].reverse()
 
     const logDecorations: { [operation: string]: string } = {
-        srt: 'table-success',
+        stt: 'table-success',
         cmt: 'table-primary',
         abt: 'table-danger',
         chp: 'table-secondary'

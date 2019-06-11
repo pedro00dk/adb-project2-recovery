@@ -1,34 +1,11 @@
 import * as React from 'react'
 import { Item, Menu, MenuProvider, Submenu } from 'react-contexify'
+import { getPathString, Node, nodeIsFile, Path } from '../Database'
 
 import 'react-contexify/dist/ReactContexify.min.css'
 
-export type File = {
-    name: string
-    content: string
-}
-
-export type Folder = {
-    name: string
-    //children: (File | Folder)[]
-    children: {[name: string]: (File | Folder)}
-}
-
-export type Path = (File | Folder)[]
-
-const nodeIsFile = (node: File | Folder): node is File => {
-    return !!(node as File).content
-}
-
-export const getPathString = (path: Path, prefix?: string) => {
-    const pathPrefix = prefix != undefined ? `${prefix}:` : ''
-    const basePath = path.map(part => part.name).join('/')
-    const folderSlash = path.length > 0 && nodeIsFile(path[path.length - 1]) ? '' : '/'
-    return `${pathPrefix}${basePath}${folderSlash}`
-}
-
 export function FileSystemTree(props: {
-    fs: Folder
+    fs: Path
     fsPrefix?: string
     onClick?: (path: Path) => void
     onLoad?: (path: Path) => void
@@ -40,7 +17,7 @@ export function FileSystemTree(props: {
         <div className='d-flex overflow-auto p-1 w-100 h-100'>
             <ul className='pl-0' style={{ listStyleType: 'none' }}>
                 <FileSystemNode
-                    path={[props.fs]}
+                    path={props.fs}
                     fsPrefix={props.fsPrefix}
                     onClick={props.onClick}
                     onLoad={props.onLoad}
@@ -54,7 +31,7 @@ export function FileSystemTree(props: {
 }
 
 function FileSystemNode(props: {
-    path: (File | Folder)[]
+    path: Path
     fsPrefix?: string
     onClick?: (path: Path) => void
     onLoad?: (path: Path) => void
@@ -101,21 +78,23 @@ function FileSystemNode(props: {
             )}
             {!isFile && (
                 <ul className='pl-4' style={{ listStyleType: 'none' }}>
-                    {(current as Folder).children.map(child => {
-                        const childPath = [...props.path, child]
-                        return (
-                            <FileSystemNode
-                                key={getPathString(childPath, props.fsPrefix)}
-                                path={childPath}
-                                fsPrefix={props.fsPrefix}
-                                onClick={props.onClick}
-                                onLoad={props.onLoad}
-                                onCreate={props.onCreate}
-                                onDelete={props.onDelete}
-                                onRename={props.onRename}
-                            />
-                        )
-                    })}
+                    {Object.values(current.children)
+                        .sort((fa, fb) => (fa.name < fb.name ? -1 : fa.name > fb.name ? 1 : 0))
+                        .map(child => {
+                            const childPath = [...props.path, child]
+                            return (
+                                <FileSystemNode
+                                    key={getPathString(childPath, props.fsPrefix)}
+                                    path={childPath}
+                                    fsPrefix={props.fsPrefix}
+                                    onClick={props.onClick}
+                                    onLoad={props.onLoad}
+                                    onCreate={props.onCreate}
+                                    onDelete={props.onDelete}
+                                    onRename={props.onRename}
+                                />
+                            )
+                        })}
                 </ul>
             )}
         </li>
