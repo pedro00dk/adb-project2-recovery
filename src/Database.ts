@@ -34,10 +34,10 @@ export const nodeSorter = (nodeA: Node, nodeB: Node) =>
         ? 1
         : 0
 
-export type Log = {
+export type LogEntry = {
     transaction: string
     timestamp: Date
-    operation: 'stt' | 'fol' | 'fil' | 'rd' | 'wr' | 'del' | 'ren' | 'cmt' | 'abt' | 'chp'
+    operation: 'start' | 'folder' | 'file' | 'read' | 'write' | 'delete' | 'rename' | 'commit' | 'abort' | 'check'
     object: string[]
     before?: string
     after?: string
@@ -45,7 +45,17 @@ export type Log = {
     nextTrOp?: number
 }
 
-export type Journal = Log[]
+export type Journal = LogEntry[]
+
+export type InfoEntry = {
+    class: '' | 'bg-light' | 'bg-primary' | 'bg-success' | 'bg-warning' | 'bg-danger'
+    transaction: string
+    description: string
+    object: string[]
+    data?: string
+}
+
+export type Info = InfoEntry[]
 
 export type Actions = {
     start?: () => void
@@ -60,20 +70,21 @@ export type Actions = {
 }
 
 export class Database {
-    persistentFs: Node = fs
-    persistentJournal: Journal = []
-    volatileFs: Node = { name: 'fs', children: {} }
-    volatileJournal: Journal = []
+    disk: Node = fs
+    journal: Journal = []
+    cache: Node = { name: 'fs', children: {} }
     activeTransactions: Set<string> = new Set()
     abortedTransactions: Set<string> = new Set()
     consolidatedTransactions: Set<string> = new Set()
+    //
+    info: Info = []
     transactionIdGenerator: number = 0
 
     constructor(public setActions: (actions?: Actions, wait?: number) => Promise<void>) {
-        this.setActions(this.actions('start', 'restart'))
+        this.setDefaultActions()
     }
 
-    private actions(...selector: (keyof Actions)[]): Actions {
+    private filterActions(...selector: (keyof Actions)[]): Actions {
         const actions: Actions = {
             start: () => this.start(),
             commit: transaction => this.commit(transaction),
@@ -88,208 +99,300 @@ export class Database {
         return Object.fromEntries(Object.entries(actions).filter(entry => selector.includes(entry[0] as keyof Actions)))
     }
 
-    private async start() {
-        const transaction = (this.transactionIdGenerator++).toString()
-        ;[this.volatileJournal, this.persistentJournal].forEach(journal =>
-            journal.push({ transaction, timestamp: new Date(), operation: 'stt', object: [] })
-        )
-        this.activeTransactions.add(transaction)
+    private setDefaultActions(wait?: number) {
+        return this.activeTransactions.size > 0
+            ? this.setActions(
+                  this.filterActions(
+                      'start',
+                      'commit',
+                      'abort',
+                      'read',
+                      'write',
+                      'create',
+                      'delete',
+                      'rename',
+                      'restart'
+                  ),
+                  wait
+              )
+            : this.setActions(this.filterActions('start', 'restart'), wait)
+    }
 
-        await this.setActions(
-            this.actions('start', 'commit', 'abort', 'restart', 'read', 'write', 'create', 'delete', 'rename')
-        )
+    private async start() {
+        // create new transaction id
+        const transaction = (this.transactionIdGenerator++).toString()
+
+        this.info.push({ class: 'bg-success', transaction, description: 'start transaction', object: [] })
+
+        // add new transaction to active transactions list and journal
+        this.activeTransactions.add(transaction)
+        this.journal.push({ transaction, timestamp: new Date(), operation: 'start', object: [] })
+
+        await this.setDefaultActions()
     }
 
     private async commit(transaction: string) {
+        // check if any transaction selected
         if (transaction == undefined) {
+            this.info.push({ class: 'bg-warning', transaction, description: 'transaction not selected', object: [] })
+
+            await this.setDefaultActions()
             return
         }
-        ;[this.volatileJournal, this.persistentJournal].forEach(journal => {
-            journal.push({ transaction, timestamp: new Date(), operation: 'cmt', object: undefined })
-            journal.push({ transaction: undefined, timestamp: new Date(), operation: 'chp', object: undefined })
-        })
 
+        this.info.push({ class: 'bg-primary', transaction, description: 'end of transaction', object: [] })
+
+        // add commit entry to journal, add in consolidate transactions and remove from active transactions
+        this.journal.push({ transaction, timestamp: new Date(), operation: 'commit', object: undefined })
         this.consolidatedTransactions.add(transaction)
         this.activeTransactions.delete(transaction)
 
-        await this.setActions(
-            this.actions('start', 'commit', 'abort', 'restart', 'read', 'write', 'create', 'delete', 'rename')
-        )
+        await this.setDefaultActions()
     }
 
-    private async abort(transaction: string) {
-        if (transaction == undefined) {
-            return
-        }
-
-        // TODO undo operations
-
-        ;[this.volatileJournal, this.persistentJournal].forEach(journal => {
-            journal.push({ transaction, timestamp: new Date(), operation: 'abt', object: undefined })
-        })
-
-        this.abortedTransactions.add(transaction)
-        this.activeTransactions.delete(transaction)
-
-        await this.setActions(
-            this.actions('start', 'commit', 'abort', 'restart', 'read', 'write', 'create', 'delete', 'rename')
-        )
-    }
+    private async abort(transaction: string) {}
 
     private async read(transaction: string, path: StringPath) {
+        // check if any transaction selected
         if (transaction == undefined) {
+            this.info.push({ class: 'bg-warning', transaction, description: 'transaction not selected', object: [] })
+
+            await this.setDefaultActions()
             return
         }
 
-        const persistentPath = fromStringPath(path, this.persistentFs)
+        this.info.push({ class: '', transaction, description: 'reading path', object: path })
 
-        let volatilePointer = this.volatileFs
-        persistentPath.slice(1).forEach(node => {
-            if (!volatilePointer.children[node.name])
-                volatilePointer.children[node.name] = nodeIsFile(node) ? { ...node } : { ...node, children: {} }
-            volatilePointer = volatilePointer.children[node.name]
+        // copying path from disk to cache
+        const diskPath = fromStringPath(path, this.disk)
+        let cachePointer = this.cache
+        diskPath.slice(1).forEach(node => {
+            if (!cachePointer.children[node.name])
+                cachePointer.children[node.name] = nodeIsFile(node) ? { ...node } : { ...node, children: {} }
+            cachePointer = cachePointer.children[node.name]
         })
 
-        await this.setActions(
-            this.actions('start', 'commit', 'abort', 'restart', 'read', 'write', 'create', 'delete', 'rename')
-        )
+        await this.setDefaultActions()
     }
 
-    private async write(transaction: string, path: StringPath, text: string) {
+    private async write(transaction: string, path: StringPath, text: string, updateJournal = true) {
+        // check if any transaction selected
         if (transaction == undefined) {
+            this.info.push({ class: 'bg-warning', transaction, description: 'transaction not selected', object: path })
+
+            await this.setDefaultActions()
             return
         }
 
-        const persistentPath = fromStringPath(path, this.persistentFs)
-        const volatilePath = fromStringPath(path, this.volatileFs)
-        const persistentNode = persistentPath.slice(-1).pop()
-        const volatileNode = volatilePath.slice(-1).pop()
+        // get references to update cache and disk
+        const cachePath = fromStringPath(path, this.cache)
+        const cacheNode = cachePath.slice(-1).pop()
+        const diskPath = fromStringPath(path, this.disk)
+        const diskNode = diskPath.slice(-1).pop()
 
-        if (volatileNode.content == undefined || volatileNode.content === text) {
+        // check if folder or content not changed
+        if (cacheNode.content == undefined || cacheNode.content === text) {
+            this.info.push({ class: 'bg-warning', transaction, description: 'content not changed', object: path })
+
+            await this.setDefaultActions()
             return
         }
 
-        ;[this.volatileJournal, this.persistentJournal].forEach(journal => {
-            journal.push({
+        this.info.push({ class: '', transaction, description: 'writing path', object: path, data: text })
+
+        // add entry to journal
+        if (updateJournal)
+            this.journal.push({
                 transaction,
                 timestamp: new Date(),
-                operation: 'wr',
+                operation: 'write',
                 object: path,
-                before: volatileNode.content,
-                after: text
+                before: cacheNode.content
             })
-        })
 
-        volatileNode.content = text
-        persistentNode.content = text
+        // update cache and then disk
+        cacheNode.content = text
+        diskNode.content = text
 
-        await this.setActions(
-            this.actions('start', 'commit', 'abort', 'restart', 'read', 'write', 'create', 'delete', 'rename')
-        )
+        await this.setDefaultActions()
     }
 
-    private async create(transaction: string, path: StringPath, type: 'file' | 'folder') {
+    private async create(transaction: string, path: StringPath, type: 'file' | 'folder', updateJournal = true) {
+        // check if any transaction selected
         if (transaction == undefined) {
+            this.info.push({ class: 'bg-warning', transaction, description: 'transaction not selected', object: path })
+
+            await this.setDefaultActions()
             return
         }
 
-        const persistentPath = fromStringPath(path, this.persistentFs)
-        const volatilePath = fromStringPath(path, this.volatileFs)
-        const persistentNode = persistentPath.slice(-1).pop()
-        const volatileNode = volatilePath.slice(-1).pop()
+        // get references to update cache and disk
+        const diskPath = fromStringPath(path, this.disk)
+        const cachePath = fromStringPath(path, this.cache)
+        const diskNode = diskPath.slice(-1).pop()
+        const cacheNode = cachePath.slice(-1).pop()
 
+        // get unique name for folder
         let name: string = type
-        for (let i = 1; !!persistentNode.children[name] || !!volatileNode.children[name]; i++) {
-            name = `${type} ${i}`
-        }
+        for (let i = 1; !!diskNode.children[name] || !!cacheNode.children[name]; i++) name = `${type} ${i}`
 
-        ;[this.volatileJournal, this.persistentJournal].forEach(journal => {
-            journal.push({
+        this.info.push({ class: '', transaction, description: `creating path ${type}`, object: path, data: name })
+
+        if (updateJournal)
+            this.journal.push({
                 transaction,
                 timestamp: new Date(),
-                operation: type === 'file' ? 'fil' : 'fol',
-                object: path,
-                after: name
+                operation: type,
+                object: [...path, name]
             })
-        })
 
-        volatileNode.children[name] = type === 'file' ? { name, content: '' } : { name, children: {} }
-        persistentNode.children[name] = type === 'file' ? { name, content: '' } : { name, children: {} }
+        // update cache and then disk
+        cacheNode.children[name] = type === 'file' ? { name, content: '' } : { name, children: {} }
+        diskNode.children[name] = type === 'file' ? { name, content: '' } : { name, children: {} }
+
+        await this.setDefaultActions()
+    }
+
+    private async delete(transaction: string, path: StringPath, updateJournal = true) {
+        // check if any transaction selected
+        if (transaction == undefined) {
+            this.info.push({ class: 'bg-warning', transaction, description: 'transaction not selected', object: path })
+
+            await this.setDefaultActions()
+            return
+        }
+
+        // get references to update cache and disk
+        const cachePath = fromStringPath(path, this.cache)
+        const cacheParent = cachePath.slice(-2, -1).pop()
+
+        // check if path is root (has no parent)
+        if (!cacheParent) {
+            this.info.push({ class: 'bg-warning', transaction, description: 'cant del root path', object: path })
+
+            await this.setDefaultActions()
+            return
+        }
+
+        this.info.push({ class: '', transaction, description: 'deleting path', object: path })
+
+        // recursive function to delete all folder elements
+        const postOrderDelete = (path: StringPath) => {
+            const diskPath = fromStringPath(path, this.disk)
+            const cachePath = fromStringPath(path, this.cache)
+            const diskNode = diskPath.slice(-1).pop()
+            const cacheNode = cachePath.slice(-1).pop()
+            const diskParent = diskPath.slice(-2, -1).pop()
+            const cacheParent = cachePath.slice(-2, -1).pop()
+
+            if (!cacheNode.content) {
+                Object.values(diskNode.children).forEach(node => postOrderDelete([...path, node.name]))
+            }
+
+            if (updateJournal)
+                this.journal.push({
+                    transaction,
+                    timestamp: new Date(),
+                    operation: 'delete',
+                    object: path.slice(0, -1),
+                    before: path.slice(-1).pop()
+                })
+
+            const nodeName = path.slice(-1).pop()
+            delete cacheParent.children[nodeName]
+            delete diskParent.children[nodeName]
+        }
+        postOrderDelete(path)
 
         await this.setActions(
-            this.actions('start', 'commit', 'abort', 'restart', 'read', 'write', 'create', 'delete', 'rename')
+            this.filterActions('start', 'commit', 'abort', 'restart', 'read', 'write', 'create', 'delete', 'rename')
         )
     }
 
-    private async delete(transaction: string, path: StringPath) {
+    private async rename(transaction: string, path: StringPath, name: string, updateJournal = true) {
+        // check if any transaction selected
         if (transaction == undefined) {
+            this.info.push({ class: 'bg-warning', transaction, description: 'transaction not selected', object: path })
+
+            await this.setDefaultActions()
             return
         }
 
-        const persistentPath = fromStringPath(path, this.persistentFs)
-        const volatilePath = fromStringPath(path, this.volatileFs)
-        const persistentParent = persistentPath.slice(-2, -1).pop()
-        const volatileParent = volatilePath.slice(-2, -1).pop()
+        // get references to update cache and disk
+        const diskPath = fromStringPath(path, this.disk)
+        const cachePath = fromStringPath(path, this.cache)
+        const diskNode = diskPath.slice(-1).pop()
+        const cacheNode = cachePath.slice(-1).pop()
+        const diskParent = diskPath.slice(-2, -1).pop()
+        const cacheParent = cachePath.slice(-2, -1).pop()
 
-        if (!volatileParent) {
-            // ignore operation, tried to delete root
+        // check if path already exists in cache and disk
+        if (!cacheNode || !!cacheParent.children[name] || !!diskParent.children[name]) {
+            this.info.push({ class: 'bg-warning', transaction, description: 'path already exists', object: path })
+
+            await this.setDefaultActions()
             return
         }
 
-        ;[this.volatileJournal, this.persistentJournal].forEach(journal =>
-            journal.push({ transaction, timestamp: new Date(), operation: 'del', object: path })
-        )
+        this.info.push({ class: '', transaction, description: 'renaming path', object: path, data: name })
 
-        const nodeName = path.slice(-1).pop()
-        delete volatileParent.children[nodeName]
-        delete persistentParent.children[nodeName]
+        const previousName = path.slice(-1).pop()
 
-        await this.setActions(
-            this.actions('start', 'commit', 'abort', 'restart', 'read', 'write', 'create', 'delete', 'rename')
-        )
-    }
+        if (updateJournal)
+            this.journal.push({
+                transaction,
+                timestamp: new Date(),
+                operation: 'rename',
+                object: [...path.slice(0, -1), name],
+                before: previousName
+            })
 
-    private async rename(transaction: string, path: StringPath, name: string) {
-        if (transaction == undefined) {
-            return
-        }
+        // update path name in cache
+        cacheNode.name = name
+        delete cacheParent.children[previousName]
+        cacheParent.children[name] = cacheNode
 
-        const persistentPath = fromStringPath(path, this.persistentFs)
-        const volatilePath = fromStringPath(path, this.volatileFs)
-        const persistentNode = persistentPath.slice(-1).pop()
-        const volatileNode = volatilePath.slice(-1).pop()
-        const persistentParent = persistentPath.slice(-2, -1).pop()
-        const volatileParent = volatilePath.slice(-2, -1).pop()
+        // update path name in disk
+        diskNode.name = name
+        delete diskParent.children[previousName]
+        diskParent.children[name] = diskNode
 
-        if (!volatileParent || !!volatileParent.children[name] || !!persistentParent.children[name]) {
-            // ignore operation, name already exists or tried to rename root
-            return
-        }
-
-        ;[this.volatileJournal, this.persistentJournal].forEach(journal => {
-            journal.push({ transaction, timestamp: new Date(), operation: 'ren', object: path, after: name })
-        })
-
-        const nodeName = path.slice(-1).pop()
-
-        volatileNode.name = name
-        delete volatileParent.children[nodeName]
-        volatileParent.children[name] = volatileNode
-
-        delete persistentParent.children[nodeName]
-        persistentNode.name = name
-        persistentParent.children[name] = persistentNode
-
-        await this.setActions(
-            this.actions('start', 'commit', 'abort', 'restart', 'read', 'write', 'create', 'delete', 'rename')
-        )
+        await this.setDefaultActions()
     }
 
     private async restart() {
-        this.volatileFs = { name: 'fs', children: {} }
-        this.volatileJournal = []
+        // clean cache data
+        this.cache = { name: 'fs', children: {} }
 
-        await this.setActions(this.actions('start', 'restart'))
+        this.info.push({ class: 'bg-danger', transaction: undefined, description: 'RESTART', object: [] })
+
+        // loop through the journal from the end
+        const undone = new Set<string>()
+        ;[...this.journal].reverse().forEach(entry => {
+            if (this.consolidatedTransactions.has(entry.transaction)) return
+            switch (entry.operation) {
+                case 'start':
+                case 'commit':
+                    return
+                case 'write':
+                    this.read('recovery', entry.object)
+                    this.write('recovery', entry.object, entry.before, false)
+                    undone.add(entry.object.join('/'))
+                    return
+                case 'rename':
+                    this.read('recovery', entry.object)
+                    this.rename('recovery', entry.object, entry.before, false)
+                    undone.delete(entry.object.join('/'))
+                    undone.add([...entry.object.slice(0, -1), entry.before].join('/'))
+                    return
+            }
+        })
+
+        // clear transaction lists
+        this.activeTransactions = new Set()
+        this.consolidatedTransactions = new Set()
+
+        await this.setDefaultActions()
     }
 
     // checkpoint() {}

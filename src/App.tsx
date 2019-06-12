@@ -1,5 +1,6 @@
 import * as React from 'react'
 import { FileSystemTree } from './components/FileSystemTree'
+import { InfoTable } from './components/InfoTable'
 import { JournalTable } from './components/JournalTable'
 import { SplitPane } from './components/SplitPane'
 import { TransactionLists } from './components/TransactionLists'
@@ -20,33 +21,53 @@ export function App() {
                 <span className='navbar-brand mb-0'>FS Database</span>
             </nav>
             <div className='d-flex flex-fill w-100'>
-                <SplitPane split='vertical' base={'75%'} left={100} right={-100}>
+                <SplitPane split='vertical' base={'60%'} left={100} right={-100}>
                     <SplitPane split='vertical' base={'50%'} left={100} right={-100}>
                         <div className='d-flex flex-column w-100 h-100'>
                             <h5 className='text-center shadow-sm p-2 mb-2 w-100'>DISK</h5>
-                            <FileSystemJournal
-                                fs={database.persistentFs}
-                                prefix='persistent'
-                                journal={database.persistentJournal}
-                                transaction={selectedTransaction}
-                                actions={{
-                                    ...actions,
-                                    write: undefined,
-                                    create: undefined,
-                                    delete: undefined,
-                                    rename: undefined
-                                }}
-                            />
+                            <SplitPane split='horizontal' base={'50%'} left={100} right={-100}>
+                                <div className='d-flex flex-column w-100 h-100'>
+                                    <h6 className='text-center p-1 mb-1 w-100'>File System</h6>
+                                    <FileSystemTree
+                                        fs={database.disk}
+                                        prefix='disk'
+                                        actions={{
+                                            ...actions,
+                                            write: undefined,
+                                            create: undefined,
+                                            delete: undefined,
+                                            rename: undefined
+                                        }}
+                                        transaction={selectedTransaction}
+                                    />
+                                </div>
+                                <div className='d-flex flex-column w-100 h-100'>
+                                    <h6 className='text-center p-1 mb-1 w-100'>Journal</h6>
+                                    <div className='d-flex overflow-auto w-100'>
+                                        <JournalTable journal={database.journal} />
+                                    </div>
+                                </div>
+                            </SplitPane>
                         </div>
                         <div className='d-flex flex-column w-100 h-100'>
                             <h5 className='text-center shadow-sm p-2 mb-2 w-100'>MEMORY</h5>
-                            <FileSystemJournal
-                                fs={database.volatileFs}
-                                transaction={selectedTransaction}
-                                prefix='volatile'
-                                journal={database.volatileJournal}
-                                actions={{ ...actions, read: undefined }}
-                            />
+                            <SplitPane split='horizontal' base={'50%'} left={100} right={-100}>
+                                <div className='d-flex flex-column w-100 h-100'>
+                                    <h6 className='text-center p-1 mb-1 w-100'>Cache</h6>
+                                    <FileSystemTree
+                                        fs={database.cache}
+                                        prefix='cache'
+                                        actions={{ ...actions, read: undefined }}
+                                        transaction={selectedTransaction}
+                                    />
+                                </div>
+                                <div className='d-flex flex-column w-100 h-100'>
+                                    <h6 className='text-center p-1 mb-1 w-100'>Info</h6>
+                                    <div className='d-flex overflow-auto w-100'>
+                                        <InfoTable info={database.info} />
+                                    </div>
+                                </div>
+                            </SplitPane>
                         </div>
                     </SplitPane>
                     <div className='d-flex flex-column w-100 h-100'>

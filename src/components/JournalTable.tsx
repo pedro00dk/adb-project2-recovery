@@ -5,10 +5,10 @@ export function JournalTable(props: { journal: Journal }) {
     const journal = [...props.journal].reverse()
 
     const logDecorations: { [operation: string]: string } = {
-        stt: 'table-success',
-        cmt: 'table-primary',
-        abt: 'table-warning',
-        chp: 'table-secondary'
+        start: 'table-success',
+        commit: 'table-primary',
+        abort: 'table-warning',
+        check: 'table-secondary'
     }
 
     return (
@@ -24,31 +24,31 @@ export function JournalTable(props: { journal: Journal }) {
                 </tr>
             </thead>
             <tbody>
-                {journal.map((log, i) => (
-                    <tr key={i} className={logDecorations[log.operation]}>
-                        <th className='text-truncate' style={{ width: '12%' }} title={log.transaction}>
-                            {log.transaction}
+                {journal.map((entry, i) => (
+                    <tr key={i} className={logDecorations[entry.operation]}>
+                        <th className='text-truncate' style={{ width: '12%' }} title={entry.transaction}>
+                            {entry.transaction}
                         </th>
                         <td
                             className='text-truncate'
                             style={{ width: '12%' }}
-                            title={`${log.timestamp.getMinutes()}:${log.timestamp.getSeconds()}`}
+                            title={`${entry.timestamp.getMinutes()}:${entry.timestamp.getSeconds()}`}
                         >
-                            {log.timestamp.getMinutes()}:{log.timestamp.getSeconds()}
+                            {entry.timestamp.getMinutes()}:{entry.timestamp.getSeconds()}
                         </td>
-                        <td className='text-truncate' style={{ width: '15%' }} title={log.operation}>
-                            {log.operation}
+                        <td className='text-truncate' style={{ width: '15%' }} title={entry.operation}>
+                            {entry.operation}
                         </td>
                         <td
                             className='text-truncate'
                             style={{ width: '31%' }}
-                            title={`${!!log.object ? log.object.join('/') : ''}`}
-                        >{`${!!log.object ? log.object.join('/') : ''}`}</td>
-                        <td className='text-truncate' style={{ width: '15%' }} title={log.before}>
-                            {log.before}
+                            title={`${!!entry.object ? entry.object.join('/') : ''}`}
+                        >{`${!!entry.object ? entry.object.join('/') : ''}`}</td>
+                        <td className='text-truncate' style={{ width: '15%' }} title={entry.before}>
+                            {entry.before}
                         </td>
-                        <td className='text-truncate' style={{ width: '15%' }} title={log.after}>
-                            {log.after}
+                        <td className='text-truncate' style={{ width: '15%' }} title={entry.after}>
+                            {entry.after}
                         </td>
                     </tr>
                 ))}
