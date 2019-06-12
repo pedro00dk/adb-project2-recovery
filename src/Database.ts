@@ -15,7 +15,9 @@ export const fromNodePath = (nodePath: NodePath) => nodePath.map(node => node.na
 
 export const fromStringPath = (stringPath: StringPath, root: Node) => {
     const nodePath = [root]
-    stringPath.slice(1).forEach(name => nodePath.push(nodePath.slice(-1).pop().children[name]))
+    for (let i = 1; i < stringPath.length; i++) {
+        nodePath.push(nodePath.slice(-1).pop().children[stringPath[i]])
+    }
     return nodePath
 }
 
@@ -145,8 +147,8 @@ export class Database {
         // add commit entry to journal, add in consolidate transactions and remove from active transactions
         this.journal.push({ transaction, timestamp: new Date(), operation: 'commit', object: undefined })
         this.consolidatedTransactions.add(transaction)
+        await this.setDefaultActions()
         this.activeTransactions.delete(transaction)
-
         await this.setDefaultActions()
     }
 
@@ -166,11 +168,12 @@ export class Database {
         // copying path from disk to cache
         const diskPath = fromStringPath(path, this.disk)
         let cachePointer = this.cache
-        diskPath.slice(1).forEach(node => {
+        for (let i = 1; i < diskPath.length; i++) {
+            const node = diskPath[i]
             if (!cachePointer.children[node.name])
                 cachePointer.children[node.name] = nodeIsFile(node) ? { ...node } : { ...node, children: {} }
             cachePointer = cachePointer.children[node.name]
-        })
+        }
 
         await this.setDefaultActions()
     }
@@ -190,8 +193,8 @@ export class Database {
         const diskPath = fromStringPath(path, this.disk)
         const diskNode = diskPath.slice(-1).pop()
 
-        // check if folder or content not changed
-        if (cacheNode.content == undefined || cacheNode.content === text) {
+        // check if folder or file content not changed
+        if (!nodeIsFile(cacheNode) || cacheNode.content === text) {
             this.info.push({ class: 'bg-warning', transaction, description: 'content not changed', object: path })
 
             await this.setDefaultActions()
@@ -232,9 +235,17 @@ export class Database {
         const diskNode = diskPath.slice(-1).pop()
         const cacheNode = cachePath.slice(-1).pop()
 
+        // check if is a file
+        if (nodeIsFile(cacheNode)) {
+            this.info.push({ class: 'bg-warning', transaction, description: 'path is file', object: path })
+
+            await this.setDefaultActions()
+            return
+        }
+
         // get unique name for folder
         let name: string = type
-        for (let i = 1; !!diskNode.children[name] || !!cacheNode.children[name]; i++) name = `${type} ${i}`
+        for (let i = 1; !!cacheNode.children[name] || !!diskNode.children[name]; i++) name = `${type} ${i}`
 
         this.info.push({ class: '', transaction, description: `creating path ${type}`, object: path, data: name })
 
@@ -251,6 +262,7 @@ export class Database {
         diskNode.children[name] = type === 'file' ? { name, content: '' } : { name, children: {} }
 
         await this.setDefaultActions()
+        return name
     }
 
     private async delete(transaction: string, path: StringPath, updateJournal = true) {
@@ -268,7 +280,7 @@ export class Database {
 
         // check if path is root (has no parent)
         if (!cacheParent) {
-            this.info.push({ class: 'bg-warning', transaction, description: 'cant del root path', object: path })
+            this.info.push({ class: 'bg-warning', transaction, description: 'cant del root', object: path })
 
             await this.setDefaultActions()
             return
@@ -277,7 +289,7 @@ export class Database {
         this.info.push({ class: '', transaction, description: 'deleting path', object: path })
 
         // recursive function to delete all folder elements
-        const postOrderDelete = (path: StringPath) => {
+        const postOrderDelete = async (path: StringPath) => {
             const diskPath = fromStringPath(path, this.disk)
             const cachePath = fromStringPath(path, this.cache)
             const diskNode = diskPath.slice(-1).pop()
@@ -285,8 +297,14 @@ export class Database {
             const diskParent = diskPath.slice(-2, -1).pop()
             const cacheParent = cachePath.slice(-2, -1).pop()
 
-            if (!cacheNode.content) {
-                Object.values(diskNode.children).forEach(node => postOrderDelete([...path, node.name]))
+            const isFile = nodeIsFile(diskNode)
+            if (!isFile) {
+                const children = Object.values(diskNode.children)
+                for (const child of children) {
+                    postOrderDelete([...path, child.name])
+                }
+            } else {
+                await this.write(transaction, path, '', updateJournal)
             }
 
             if (updateJournal)
@@ -295,18 +313,17 @@ export class Database {
                     timestamp: new Date(),
                     operation: 'delete',
                     object: path.slice(0, -1),
-                    before: path.slice(-1).pop()
+                    before: `${isFile ? 'file' : 'folder'}/${path.slice(-1).pop()}`
                 })
 
             const nodeName = path.slice(-1).pop()
-            delete cacheParent.children[nodeName]
+            if (!!cacheParent) delete cacheParent.children[nodeName]
             delete diskParent.children[nodeName]
         }
-        postOrderDelete(path)
+        // run post order delete on current path
+        await postOrderDelete(path)
 
-        await this.setActions(
-            this.filterActions('start', 'commit', 'abort', 'restart', 'read', 'write', 'create', 'delete', 'rename')
-        )
+        await this.setDefaultActions()
     }
 
     private async rename(transaction: string, path: StringPath, name: string, updateJournal = true) {
@@ -368,29 +385,56 @@ export class Database {
 
         // loop through the journal from the end
         const undone = new Set<string>()
-        ;[...this.journal].reverse().forEach(entry => {
-            if (this.consolidatedTransactions.has(entry.transaction)) return
-            switch (entry.operation) {
-                case 'start':
-                case 'commit':
-                    return
-                case 'write':
-                    this.read('recovery', entry.object)
-                    this.write('recovery', entry.object, entry.before, false)
-                    undone.add(entry.object.join('/'))
-                    return
-                case 'rename':
-                    this.read('recovery', entry.object)
-                    this.rename('recovery', entry.object, entry.before, false)
-                    undone.delete(entry.object.join('/'))
-                    undone.add([...entry.object.slice(0, -1), entry.before].join('/'))
-                    return
-            }
-        })
+        const reversedJournal = [...this.journal].reverse()
+        for (const entry of reversedJournal) {
+            this.journal.pop()
+            if (
+                this.activeTransactions.has(entry.transaction) &&
+                !this.consolidatedTransactions.has(entry.transaction)
+            ) {
+                switch (entry.operation) {
+                    case 'start':
+                        this.activeTransactions.delete(entry.transaction)
+                        break
+                    case 'commit':
+                        break
+                    case 'write':
+                        await this.read('rec', entry.object)
+                        await this.write('rec', entry.object, entry.before, false)
+                        undone.add(getPathname(entry.object))
+                        break
+                    case 'file':
+                    case 'folder':
+                        // creation operations
+                        await this.read('rec', entry.object)
+                        await this.delete('rec', entry.object, false)
+                        undone.delete(getPathname(entry.object))
+                        break
+                    case 'delete':
+                        const [type, name] = entry.before.split('/')
+                        await this.read('rec', entry.object)
+                        const createdName = await this.create('rec', entry.object, type as 'folder' | 'file', false)
+                        await this.rename('rec', [...entry.object, createdName], name, false)
+                        undone.add(getPathname([...entry.object, name]))
+                        break
+                    case 'rename':
+                        await this.read('rec', entry.object)
+                        await this.rename('rec', entry.object, entry.before, false)
+                        undone.delete(getPathname(entry.object))
+                        undone.add(getPathname([...entry.object.slice(0, -1), entry.before]))
+                        break
+                }
+            } else if (
+                this.activeTransactions.has(entry.transaction) &&
+                this.consolidatedTransactions.has(entry.transaction)
+            )
+                this.activeTransactions.delete(entry.transaction)
+        }
 
-        // clear transaction lists
-        this.activeTransactions = new Set()
         this.consolidatedTransactions = new Set()
+
+        // clear journal
+        this.journal = []
 
         await this.setDefaultActions()
     }

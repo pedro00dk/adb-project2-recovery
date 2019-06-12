@@ -65,7 +65,7 @@ function FileSystemNode(props: { path: NodePath; prefix: string; transaction: st
                         {!!props.actions.read && (
                             <Item onClick={() => props.actions.read(props.transaction, stringPath)}>read</Item>
                         )}
-                        {!!props.actions.write && <Item onClick={() => setWrite(true)}>write</Item>}
+                        {!!props.actions.write && isFile && <Item onClick={() => setWrite(true)}>write</Item>}
                         {!!props.actions.create && !isFile && (
                             <Submenu label='create'>
                                 <Item onClick={() => props.actions.create(props.transaction, stringPath, 'file')}>
@@ -104,7 +104,7 @@ function FileSystemNode(props: { path: NodePath; prefix: string; transaction: st
             {!isFile && (
                 <ul className='pl-4' style={{ listStyleType: 'none' }}>
                     {Object.values(node.children)
-                        .sort((fa, fb) => (fa.name < fb.name ? -1 : fa.name > fb.name ? 1 : 0))
+                        .sort((nodeA, nodeB) => nodeSorter(nodeA, nodeB))
                         .map((child, i) => (
                             <FileSystemNode
                                 key={i}

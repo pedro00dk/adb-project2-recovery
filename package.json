@@ -17,12 +17,14 @@
     },
     "dependencies": {
         "@babel/polyfill": "7.4.4",
+        "@types/uuid": "^3.4.4",
         "classnames": "2.2.6",
         "emotion": "10.0.9",
         "react": "16.8.6",
         "react-contexify": "4.1.1",
         "react-dom": "16.8.6",
-        "react-split-pane": "0.1.87"
+        "react-split-pane": "0.1.87",
+        "uuid": "^3.3.2"
     },
     "scripts": {
         "format": "shopt -s extglob globstar && tslint -c ./tslint.json -p ./package.json && prettier --config ./.prettierrc.js -c --write ./src/**/*.ts* && shopt -u extglob globstar",
