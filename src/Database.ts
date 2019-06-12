@@ -301,7 +301,7 @@ export class Database {
             if (!isFile) {
                 const children = Object.values(diskNode.children)
                 for (const child of children) {
-                    postOrderDelete([...path, child.name])
+                    await postOrderDelete([...path, child.name])
                 }
             } else {
                 await this.write(transaction, path, '', updateJournal)
