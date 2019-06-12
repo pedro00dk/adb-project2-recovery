@@ -152,7 +152,26 @@ export class Database {
         await this.setDefaultActions()
     }
 
-    private async abort(transaction: string) {}
+    private async abort(transaction: string) {
+        // check if any transaction selected
+        if (transaction == undefined) {
+            this.info.push({ class: 'bg-warning', transaction, description: 'transaction not selected', object: [] })
+
+            await this.setDefaultActions()
+            return
+        }
+
+        this.info.push({ class: 'bg-danger', transaction, description: 'Abort', object: [] })
+
+        this.journal.push({
+            transaction,
+            timestamp: new Date(),
+            operation: 'abort',
+            object: []
+        })
+
+        await this.restart(transaction)
+    }
 
     private async read(transaction: string, path: StringPath) {
         // check if any transaction selected
@@ -186,6 +205,8 @@ export class Database {
             await this.setDefaultActions()
             return
         }
+
+        await this.read(transaction, path)
 
         // get references to update cache and disk
         const cachePath = fromStringPath(path, this.cache)
@@ -228,6 +249,8 @@ export class Database {
             await this.setDefaultActions()
             return
         }
+
+        await this.read(transaction, path)
 
         // get references to update cache and disk
         const diskPath = fromStringPath(path, this.disk)
@@ -273,6 +296,8 @@ export class Database {
             await this.setDefaultActions()
             return
         }
+
+        await this.read(transaction, path)
 
         // get references to update cache and disk
         const cachePath = fromStringPath(path, this.cache)
@@ -335,6 +360,8 @@ export class Database {
             return
         }
 
+        await this.read(transaction, path)
+
         // get references to update cache and disk
         const diskPath = fromStringPath(path, this.disk)
         const cachePath = fromStringPath(path, this.cache)
@@ -377,17 +404,28 @@ export class Database {
         await this.setDefaultActions()
     }
 
-    private async restart() {
+    private async restart(abortTransaction?: string) {
         // clean cache data
-        this.cache = { name: 'fs', children: {} }
 
-        this.info.push({ class: 'bg-danger', transaction: undefined, description: 'RESTART', object: [] })
+        if (abortTransaction == undefined) this.cache = { name: 'fs', children: {} }
 
-        // loop through the journal from the end
+        if (abortTransaction == undefined)
+            this.info.push({ class: 'bg-danger', transaction: undefined, description: 'RESTART', object: [] })
+        else
+            this.info.push({ class: 'bg-danger', transaction: abortTransaction, description: 'Abort UNDO', object: [] })
+
         const undone = new Set<string>()
-        const reversedJournal = [...this.journal].reverse()
-        for (const entry of reversedJournal) {
-            this.journal.pop()
+
+        const operationsToUndo =
+            abortTransaction == undefined
+                ? this.journal
+                : this.journal.filter(entry => entry.transaction === abortTransaction)
+
+        const reversedOperationToUndo = [...operationsToUndo].reverse()
+
+        for (const entry of reversedOperationToUndo) {
+            if (abortTransaction == undefined) this.journal.pop()
+
             if (
                 this.activeTransactions.has(entry.transaction) &&
                 !this.consolidatedTransactions.has(entry.transaction)
@@ -431,10 +469,13 @@ export class Database {
                 this.activeTransactions.delete(entry.transaction)
         }
 
-        this.consolidatedTransactions = new Set()
+        if (abortTransaction == undefined) {
+            // clear consolidate transactions
+            this.consolidatedTransactions = new Set()
 
-        // clear journal
-        this.journal = []
+            // clear journal
+            this.journal = []
+        }
 
         await this.setDefaultActions()
     }
