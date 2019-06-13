@@ -1,4 +1,4 @@
-import { Node } from './Database'
+import { Node } from './database/DataTypes'
 
 export const fs: Node = {
     name: 'fs',

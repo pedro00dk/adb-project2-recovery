@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { Info } from '../Database'
+import { Info } from '../database/DataTypes'
 
 export function InfoTable(props: { info: Info }) {
     const info = [...props.info].reverse()

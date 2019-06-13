@@ -4,12 +4,14 @@ import { InfoTable } from './components/InfoTable'
 import { JournalTable } from './components/JournalTable'
 import { SplitPane } from './components/SplitPane'
 import { TransactionLists } from './components/TransactionLists'
-import { Actions, Database, Journal, Node } from './Database'
+import { Actions, Journal, Node } from './database/DataTypes'
+import { NoUndoRedo } from './database/NoUndoRedo'
+import { UndoNoRedo } from './database/UndoNoRedo'
 
 export function App() {
     const [actions, setActions] = React.useState<Actions>({})
     const [database, setDatabase] = React.useState(
-        () => new Database((actions, wait) => new Promise(res => setTimeout(() => res(setActions(actions)), wait)))
+        () => new NoUndoRedo((actions, wait) => new Promise(res => setTimeout(() => res(setActions(actions)), wait)))
     )
     const [selectedTransaction, setSelectedTransaction] = React.useState<string>()
     if (selectedTransaction != undefined && !database.activeTransactions.has(selectedTransaction))

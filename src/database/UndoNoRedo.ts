@@ -1,77 +1,7 @@
-import { fs } from './mock'
+import { fs } from '../mock'
+import { Actions, fromStringPath, getPathname, Info, Journal, Node, nodeIsFile, StringPath } from './DataTypes'
 
-export type Node = {
-    name: string
-    children?: { [name: string]: Node }
-    content?: string
-}
-
-export type NodePath = Node[]
-export type StringPath = string[]
-
-export const nodeIsFile = (node: Node) => !node.children
-
-export const fromNodePath = (nodePath: NodePath) => nodePath.map(node => node.name)
-
-export const fromStringPath = (stringPath: StringPath, root: Node) => {
-    const nodePath = [root]
-    for (let i = 1; i < stringPath.length; i++) {
-        nodePath.push(nodePath.slice(-1).pop().children[stringPath[i]])
-    }
-    return nodePath
-}
-
-export const getPathname = (path: StringPath, prefix?: string) => {
-    return `${prefix != undefined ? `${prefix}:` : ''}${path.join('/')}`
-}
-
-export const nodeSorter = (nodeA: Node, nodeB: Node) =>
-    !!nodeA.children && !nodeB.children
-        ? -1
-        : !nodeA.children && !!nodeB.children
-        ? 1
-        : nodeA.name < nodeB.name
-        ? -1
-        : nodeA.name > nodeB.name
-        ? 1
-        : 0
-
-export type LogEntry = {
-    transaction: string
-    timestamp: Date
-    operation: 'start' | 'folder' | 'file' | 'read' | 'write' | 'delete' | 'rename' | 'commit' | 'abort' | 'check'
-    object: string[]
-    before?: string
-    after?: string
-    prevTrOp?: number
-    nextTrOp?: number
-}
-
-export type Journal = LogEntry[]
-
-export type InfoEntry = {
-    class: '' | 'bg-light' | 'bg-primary' | 'bg-success' | 'bg-warning' | 'bg-danger'
-    transaction: string
-    description: string
-    object: string[]
-    data?: string
-}
-
-export type Info = InfoEntry[]
-
-export type Actions = {
-    start?: () => void
-    commit?: (transaction: string) => void
-    abort?: (transaction: string) => void
-    read?: (transaction: string, path: StringPath) => void
-    create?: (transaction: string, path: StringPath, type: 'file' | 'folder') => void
-    delete?: (transaction: string, path: StringPath) => void
-    rename?: (transaction: string, path: StringPath, name: string) => void
-    write?: (transaction: string, path: StringPath, text: string) => void
-    restart?: () => void
-}
-
-export class Database {
+export class UndoNoRedo {
     disk: Node = fs
     journal: Journal = []
     cache: Node = { name: 'fs', children: {} }
@@ -209,10 +139,10 @@ export class Database {
         await this.read(transaction, path)
 
         // get references to update cache and disk
-        const cachePath = fromStringPath(path, this.cache)
-        const cacheNode = cachePath.slice(-1).pop()
         const diskPath = fromStringPath(path, this.disk)
         const diskNode = diskPath.slice(-1).pop()
+        const cachePath = fromStringPath(path, this.cache)
+        const cacheNode = cachePath.slice(-1).pop()
 
         // check if folder or file content not changed
         if (!nodeIsFile(cacheNode) || cacheNode.content === text) {
@@ -254,8 +184,8 @@ export class Database {
 
         // get references to update cache and disk
         const diskPath = fromStringPath(path, this.disk)
-        const cachePath = fromStringPath(path, this.cache)
         const diskNode = diskPath.slice(-1).pop()
+        const cachePath = fromStringPath(path, this.cache)
         const cacheNode = cachePath.slice(-1).pop()
 
         // check if is a file
@@ -316,11 +246,11 @@ export class Database {
         // recursive function to delete all folder elements
         const postOrderDelete = async (path: StringPath) => {
             const diskPath = fromStringPath(path, this.disk)
-            const cachePath = fromStringPath(path, this.cache)
-            const diskNode = diskPath.slice(-1).pop()
-            const cacheNode = cachePath.slice(-1).pop()
             const diskParent = diskPath.slice(-2, -1).pop()
+            const diskNode = diskPath.slice(-1).pop()
+            const cachePath = fromStringPath(path, this.cache)
             const cacheParent = cachePath.slice(-2, -1).pop()
+            const cacheNode = cachePath.slice(-1).pop()
 
             const isFile = nodeIsFile(diskNode)
             if (!isFile) {
@@ -364,11 +294,11 @@ export class Database {
 
         // get references to update cache and disk
         const diskPath = fromStringPath(path, this.disk)
-        const cachePath = fromStringPath(path, this.cache)
-        const diskNode = diskPath.slice(-1).pop()
-        const cacheNode = cachePath.slice(-1).pop()
         const diskParent = diskPath.slice(-2, -1).pop()
+        const diskNode = diskPath.slice(-1).pop()
+        const cachePath = fromStringPath(path, this.cache)
         const cacheParent = cachePath.slice(-2, -1).pop()
+        const cacheNode = cachePath.slice(-1).pop()
 
         // check if path already exists in cache and disk
         if (!cacheNode || !!cacheParent.children[name] || !!diskParent.children[name]) {

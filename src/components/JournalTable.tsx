@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { Journal } from '../Database'
+import { Journal } from '../database/DataTypes'
 
 export function JournalTable(props: { journal: Journal }) {
     const journal = [...props.journal].reverse()

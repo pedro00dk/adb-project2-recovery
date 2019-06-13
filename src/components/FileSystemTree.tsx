@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { Item, Menu, MenuProvider, Submenu } from 'react-contexify'
-import { Actions, fromNodePath, getPathname, Node, nodeIsFile, NodePath, nodeSorter, StringPath } from '../Database'
+import { Actions, fromNodePath, getPathname, Node, nodeIsFile, NodePath, nodeSorter, StringPath } from '../database/DataTypes'
 
 import 'react-contexify/dist/ReactContexify.min.css'
 
