@@ -2,7 +2,7 @@ import { fs } from '../mock'
 import { Actions, fromStringPath, getPathname, Info, Journal, Node, nodeIsFile, StringPath } from './DataTypes'
 
 export class UndoNoRedo {
-    disk: Node = fs
+    disk: Node = JSON.parse(JSON.stringify(fs))
     journal: Journal = []
     cache: Node = { name: 'fs', children: {} }
     activeTransactions: Set<string> = new Set()

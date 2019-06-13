@@ -8,11 +8,30 @@ import { Actions, Journal, Node } from './database/DataTypes'
 import { NoUndoRedo } from './database/NoUndoRedo'
 import { UndoNoRedo } from './database/UndoNoRedo'
 
+type AlgorithmData = ['immediate', UndoNoRedo] | ['delayed', NoUndoRedo]
+
 export function App() {
     const [actions, setActions] = React.useState<Actions>({})
-    const [database, setDatabase] = React.useState(
-        () => new NoUndoRedo((actions, wait) => new Promise(res => setTimeout(() => res(setActions(actions)), wait)))
-    )
+    const [algorithmData, setAlgorithmData] = React.useState<AlgorithmData>(() => [
+        'immediate',
+        new UndoNoRedo((actions, wait) => new Promise(res => setTimeout(() => res(setActions(actions)), wait)))
+    ])
+
+    const database = algorithmData[1]
+    const setAlgorithm = (type: 'immediate' | 'delayed') => {
+        const newAlgorithmData = [
+            type,
+            type === 'immediate'
+                ? new UndoNoRedo(
+                      (actions, wait) => new Promise(res => setTimeout(() => res(setActions(actions)), wait))
+                  )
+                : new NoUndoRedo(
+                      (actions, wait) => new Promise(res => setTimeout(() => res(setActions(actions)), wait))
+                  )
+        ] as const
+        setAlgorithmData(newAlgorithmData as any)
+    }
+
     const [selectedTransaction, setSelectedTransaction] = React.useState<string>()
     if (selectedTransaction != undefined && !database.activeTransactions.has(selectedTransaction))
         setSelectedTransaction(undefined)
@@ -73,7 +92,7 @@ export function App() {
                         </div>
                     </SplitPane>
                     <div className='d-flex flex-column w-100 h-100'>
-                        <RecoveryAlgorithms chosenRA={'ur'} />
+                        <RecoveryAlgorithms chosenRA={algorithmData[0]} onChooseRA={setAlgorithm} />
                         <TransactionActions transaction={selectedTransaction} actions={actions} />
                         <TransactionLists
                             active={[...database.activeTransactions].sort().map(transaction => transaction.toString())}
@@ -93,73 +112,32 @@ export function App() {
     )
 }
 
-function FileSystemJournal(props: {
-    fs: Node
-    prefix: string
-    journal: Journal
-    transaction: string
-    actions: Actions
+function RecoveryAlgorithms(props: {
+    chosenRA: 'immediate' | 'delayed'
+    onChooseRA: (algorithm: 'immediate' | 'delayed') => void
 }) {
-    return (
-        <SplitPane split='horizontal' base={'50%'} left={100} right={-100}>
-            <div className='d-flex flex-column w-100 h-100'>
-                <h6 className='text-center p-1 mb-1 w-100'>File System</h6>
-                <FileSystemTree
-                    fs={props.fs}
-                    prefix={props.prefix}
-                    actions={props.actions}
-                    transaction={props.transaction}
-                />
-            </div>
-            <div className='d-flex flex-column w-100 h-100'>
-                <h6 className='text-center p-1 mb-1 w-100'>Journal</h6>
-                <div className='d-flex overflow-auto w-100'>
-                    <JournalTable journal={props.journal} />
-                </div>
-            </div>
-        </SplitPane>
-    )
-}
-
-function RecoveryAlgorithms(props: { chosenRA: string; onChooseRA?: (algorithm: string) => void }) {
-    React.useEffect(() => {
-        if (props.chosenRA != undefined && !!props.onChooseRA) props.onChooseRA('ur')
-    }, [])
-
     return (
         <div className='d-flex flex-column shadow-sm m-2 w-100'>
             <h6 className='text-center p-2 mb-1'>Recovery Algorithms</h6>
             <div className='d-flex m-2'>
                 <button
                     type='button'
-                    className={`btn ${props.chosenRA === 'ur' ? 'btn-primary' : 'btn-outline-secondary'} flex-fill m-2`}
-                    style={{ width: '33%' }}
-                    disabled={!props.onChooseRA}
-                    onClick={event => props.onChooseRA('ur')}
-                >
-                    <span className='d-block'>immediate</span>
-                    (UNDO/REDO)
-                </button>
-                <button
-                    type='button'
-                    className={`btn ${
-                        props.chosenRA === 'unr' ? 'btn-primary' : 'btn-outline-secondary'
+                    className={`w-50 btn ${
+                        props.chosenRA === 'immediate' ? 'btn-primary' : 'btn-outline-secondary'
                     } flex-fill m-2`}
-                    style={{ width: '33%' }}
-                    disabled={!props.onChooseRA}
-                    onClick={event => props.onChooseRA('unr')}
+                    disabled={props.chosenRA === 'immediate'}
+                    onClick={event => props.onChooseRA('immediate')}
                 >
                     <span className='d-block'>immediate</span>
                     (UNDO/NO-REDO)
                 </button>
                 <button
                     type='button'
-                    className={`btn ${
-                        props.chosenRA === 'nur' ? 'btn-primary' : 'btn-outline-secondary'
+                    className={`w-50 btn ${
+                        props.chosenRA === 'delayed' ? 'btn-primary' : 'btn-outline-secondary'
                     } flex-fill m-2`}
-                    style={{ width: '33%' }}
-                    disabled={!props.onChooseRA}
-                    onClick={event => props.onChooseRA('nur')}
+                    disabled={props.chosenRA === 'delayed'}
+                    onClick={event => props.onChooseRA('delayed')}
                 >
                     <span className='d-block'>delayed</span>
                     (NO-UNDO/REDO)

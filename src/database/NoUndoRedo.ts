@@ -2,7 +2,7 @@ import { fs } from '../mock'
 import { Actions, fromStringPath, getPathname, Info, Journal, Node, nodeIsFile, StringPath } from './DataTypes'
 
 export class NoUndoRedo {
-    disk: Node = fs
+    disk: Node = JSON.parse(JSON.stringify(fs))
     journal: Journal = []
     cache: Node = { name: 'fs', children: {} }
     activeTransactions: Set<string> = new Set()
@@ -109,9 +109,6 @@ export class NoUndoRedo {
     }
 
     private async read(transaction: string, path: StringPath) {
-        console.log(path)
-        console.log(this.cache)
-        console.log(this.disk)
         // check if any transaction selected
         if (transaction == undefined) {
             this.info.push({ class: 'bg-warning', transaction, description: 'transaction not selected', object: [] })
@@ -144,7 +141,6 @@ export class NoUndoRedo {
                     if (!!cacheParent) delete cacheParent.children[lastEntry.object.slice(-1).pop()]
                     break
                 case 'rename':
-                    console.log('here')
                     const previousName = cacheNode.name
                     delete cacheParent.children[previousName]
                     cacheNode.name = lastEntry.after
@@ -300,7 +296,6 @@ export class NoUndoRedo {
     }
 
     private async rename(transaction: string, path: StringPath, name: string, updateJournal = true) {
-        console.log(path)
         // check if any transaction selected
         if (transaction == undefined) {
             this.info.push({ class: 'bg-warning', transaction, description: 'transaction not selected', object: path })
