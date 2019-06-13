@@ -79,36 +79,6 @@ export class NoUndoRedo {
         this.consolidatedTransactions.add(transaction)
         this.activeTransactions.delete(transaction)
 
-        const transactionEntries = [...this.journal].filter(entry => entry.transaction === transaction)
-        for (const entry of transactionEntries) {
-            const diskPath = fromStringPath(entry.object.length !== 0 ? entry.object : ['fs'], this.disk)
-            const diskParent = diskPath.slice(-2, -1).pop()
-            const diskNode = diskPath.slice(-1).pop()
-            switch (entry.operation) {
-                case 'start':
-                case 'commit':
-                    break
-                case 'write':
-                    diskNode.content = entry.after
-                    break
-                case 'file':
-                    diskNode.children[entry.after] = { name: entry.after, content: '' }
-                    break
-                case 'folder':
-                    diskNode.children[entry.after] = { name: entry.after, children: {} }
-                    break
-                case 'delete':
-                    if (!!diskParent) delete diskParent.children[entry.object.slice(-1).pop()]
-                    break
-                case 'rename':
-                    const previousName = diskNode.name
-                    diskNode.name = entry.after
-                    delete diskParent.children[previousName]
-                    diskParent.children[name] = diskNode
-                    break
-            }
-        }
-
         await this.setDefaultActions()
     }
 
@@ -130,10 +100,18 @@ export class NoUndoRedo {
             object: []
         })
 
-        await this.restart(transaction)
+        this.abortedTransactions.add(transaction)
+        this.activeTransactions.delete(transaction)
+
+        // we can not undo partition values read from the transaction
+        // they will stay at the cache but will never be moved to the disk
+        await this.setDefaultActions()
     }
 
     private async read(transaction: string, path: StringPath) {
+        console.log(path)
+        console.log(this.cache)
+        console.log(this.disk)
         // check if any transaction selected
         if (transaction == undefined) {
             this.info.push({ class: 'bg-warning', transaction, description: 'transaction not selected', object: [] })
@@ -166,10 +144,11 @@ export class NoUndoRedo {
                     if (!!cacheParent) delete cacheParent.children[lastEntry.object.slice(-1).pop()]
                     break
                 case 'rename':
+                    console.log('here')
                     const previousName = cacheNode.name
-                    cacheNode.name = lastEntry.after
                     delete cacheParent.children[previousName]
-                    cacheParent.children[name] = cacheNode
+                    cacheNode.name = lastEntry.after
+                    cacheParent.children[lastEntry.after] = cacheNode
                     break
             }
         } else {
@@ -249,7 +228,8 @@ export class NoUndoRedo {
 
         // get unique name for folder
         let name: string = type
-        for (let i = 1; !!cacheNode.children[name] || !!diskNode.children[name]; i++) name = `${type} ${i}`
+        for (let i = 1; !!cacheNode.children[name] || (!!diskNode && !!diskNode.children[name]); i++)
+            name = `${type} ${i}`
 
         this.info.push({ class: '', transaction, description: `creating path ${type}`, object: path, data: name })
 
@@ -320,6 +300,7 @@ export class NoUndoRedo {
     }
 
     private async rename(transaction: string, path: StringPath, name: string, updateJournal = true) {
+        console.log(path)
         // check if any transaction selected
         if (transaction == undefined) {
             this.info.push({ class: 'bg-warning', transaction, description: 'transaction not selected', object: path })
@@ -346,8 +327,6 @@ export class NoUndoRedo {
 
         this.info.push({ class: '', transaction, description: 'renaming path', object: path, data: name })
 
-        const previousName = path.slice(-1).pop()
-
         if (updateJournal)
             this.journal.push({
                 transaction,
@@ -361,81 +340,77 @@ export class NoUndoRedo {
         await this.read(transaction, path)
     }
 
-    private async restart(abortTransaction?: string) {
+    private async restart() {
         // clean cache data
 
-        if (abortTransaction == undefined) this.cache = { name: 'fs', children: {} }
+        this.cache = { name: 'fs', children: {} }
 
-        if (abortTransaction == undefined)
-            this.info.push({ class: 'bg-danger', transaction: undefined, description: 'RESTART', object: [] })
-        else
-            this.info.push({ class: 'bg-danger', transaction: abortTransaction, description: 'Abort UNDO', object: [] })
+        this.info.push({ class: 'bg-danger', transaction: undefined, description: 'RESTART', object: [] })
 
-        const undone = new Set<string>()
+        const redone = new Set<string>()
 
-        const operationsToUndo =
-            abortTransaction == undefined
-                ? this.journal
-                : this.journal.filter(entry => entry.transaction === abortTransaction)
+        const checkpointFinder = [...this.journal].reverse()
+        const transactionsToRedo = new Set<string>()
+        const transactionsNotToRedo = new Set<string>([...this.abortedTransactions])
 
-        const reversedOperationToUndo = [...operationsToUndo].reverse()
-
-        for (const entry of reversedOperationToUndo) {
-            if (abortTransaction == undefined) this.journal.pop()
-
-            if (
-                this.activeTransactions.has(entry.transaction) &&
-                !this.consolidatedTransactions.has(entry.transaction)
-            ) {
-                switch (entry.operation) {
-                    case 'start':
-                        this.activeTransactions.delete(entry.transaction)
-                        break
-                    case 'commit':
-                        break
-                    case 'write':
-                        await this.read('rec', entry.object)
-                        await this.write('rec', entry.object, entry.before, false)
-                        undone.add(getPathname(entry.object))
-                        break
-                    case 'file':
-                    case 'folder':
-                        // creation operations
-                        await this.read('rec', entry.object)
-                        await this.delete('rec', entry.object, false)
-                        undone.delete(getPathname(entry.object))
-                        break
-                    case 'delete':
-                        const [type, name] = entry.before.split('/')
-                        await this.read('rec', entry.object)
-                        const createdName = await this.create('rec', entry.object, type as 'folder' | 'file', false)
-                        await this.rename('rec', [...entry.object, createdName], name, false)
-                        undone.add(getPathname([...entry.object, name]))
-                        break
-                    case 'rename':
-                        await this.read('rec', entry.object)
-                        await this.rename('rec', entry.object, entry.before, false)
-                        undone.delete(getPathname(entry.object))
-                        undone.add(getPathname([...entry.object.slice(0, -1), entry.before]))
-                        break
-                }
-            } else if (
-                this.activeTransactions.has(entry.transaction) &&
-                this.consolidatedTransactions.has(entry.transaction)
-            )
-                this.activeTransactions.delete(entry.transaction)
+        for (const entry of checkpointFinder) {
+            if (entry.operation === 'commit') transactionsToRedo.add(entry.transaction)
+            else if (entry.operation === 'abort') transactionsNotToRedo.add(entry.transaction)
+            else if (!transactionsToRedo.has(entry.transaction)) transactionsNotToRedo.add(entry.transaction)
+            else if (entry.operation === 'check') {
+                entry.object.forEach(transaction => {
+                    if (!transactionsToRedo.has(transaction)) transactionsNotToRedo.add(transaction)
+                })
+                break
+            }
         }
 
-        if (abortTransaction == undefined) {
-            // clear consolidate transactions
-            this.consolidatedTransactions = new Set()
-
-            // clear journal
-            this.journal = []
+        const transactionsOperationsToRedo = this.journal.filter(entry => transactionsToRedo.has(entry.transaction))
+        for (const entry of transactionsOperationsToRedo) {
+            const diskPath = fromStringPath(entry.object.length !== 0 ? entry.object : ['fs'], this.disk)
+            const diskParent = diskPath.slice(-2, -1).pop()
+            const diskNode = diskPath.slice(-1).pop()
+            switch (entry.operation) {
+                case 'start':
+                case 'commit':
+                    break
+                case 'write':
+                    redone.add(getPathname(entry.object))
+                    diskNode.content = entry.after
+                    break
+                case 'file':
+                    diskNode.children[entry.after] = { name: entry.after, content: '' }
+                    redone.add(getPathname([...entry.object, entry.after]))
+                    break
+                case 'folder':
+                    diskNode.children[entry.after] = { name: entry.after, children: {} }
+                    redone.add(getPathname([...entry.object, entry.after]))
+                    break
+                case 'delete':
+                    delete diskParent.children[entry.object.slice(-1).pop()]
+                    redone.delete(getPathname(entry.object))
+                    break
+                case 'rename':
+                    const previousName = diskNode.name
+                    diskNode.name = entry.after
+                    delete diskParent.children[previousName]
+                    diskParent.children[entry.after] = diskNode
+                    redone.delete(getPathname([...entry.object.slice(0, -1), previousName]))
+                    redone.add(getPathname(entry.object))
+                    break
+            }
         }
+
+        // clear aborted and consolidate transactions
+        this.activeTransactions = new Set()
+        this.consolidatedTransactions = new Set()
+        this.abortedTransactions = new Set()
+
+        // clear journal
+        this.journal = []
 
         await this.setDefaultActions()
     }
 
-    // checkpoint() {}
+    private async checkpoint() {}
 }

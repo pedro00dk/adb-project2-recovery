@@ -12,11 +12,16 @@ export const nodeIsFile = (node: Node) => !node.children
 export const fromNodePath = (nodePath: NodePath) => nodePath.map(node => node.name)
 
 export const fromStringPath = (stringPath: StringPath, root: Node) => {
-    const nodePath = [root]
-    for (let i = 1; i < stringPath.length; i++) {
-        nodePath.push(nodePath.slice(-1).pop().children[stringPath[i]])
+    try {
+        const nodePath = [root]
+        for (let i = 1; i < stringPath.length; i++) {
+            const nextChild = nodePath.slice(-1).pop().children[stringPath[i]]
+            nodePath.push(nextChild)
+        }
+        return nodePath
+    } catch (error) {
+        return []
     }
-    return nodePath
 }
 
 export const getPathname = (path: StringPath, prefix?: string) => {
