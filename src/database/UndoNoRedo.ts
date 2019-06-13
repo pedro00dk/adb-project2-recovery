@@ -26,7 +26,8 @@ export class UndoNoRedo {
             create: (transaction, path, type) => this.create(transaction, path, type),
             delete: (transaction, path) => this.delete(transaction, path),
             rename: (transaction, path, name) => this.rename(transaction, path, name),
-            restart: () => this.restart()
+            restart: () => this.restart(),
+            checkpoint: () => this.checkpoint()
         }
         return Object.fromEntries(Object.entries(actions).filter(entry => selector.includes(entry[0] as keyof Actions)))
     }
@@ -43,11 +44,12 @@ export class UndoNoRedo {
                       'create',
                       'delete',
                       'rename',
-                      'restart'
+                      'restart',
+                      'checkpoint'
                   ),
                   wait
               )
-            : this.setActions(this.filterActions('start', 'restart'), wait)
+            : this.setActions(this.filterActions('start', 'restart', 'checkpoint'), wait)
     }
 
     private async start() {
@@ -410,5 +412,18 @@ export class UndoNoRedo {
         await this.setDefaultActions()
     }
 
-    // checkpoint() {}
+    private async checkpoint() {
+        this.consolidatedTransactions = new Set()
+
+        this.info.push({ transaction: undefined, description: 'running checkpoint', object: [], class: 'bg-light' })
+
+        this.journal.push({
+            transaction: undefined,
+            timestamp: new Date(),
+            operation: 'check',
+            object: [...this.activeTransactions]
+        })
+
+        await this.setDefaultActions()
+    }
 }

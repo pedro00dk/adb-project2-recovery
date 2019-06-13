@@ -26,7 +26,8 @@ export class NoUndoRedo {
             create: (transaction, path, type) => this.create(transaction, path, type),
             delete: (transaction, path) => this.delete(transaction, path),
             rename: (transaction, path, name) => this.rename(transaction, path, name),
-            restart: () => this.restart()
+            restart: () => this.restart(),
+            checkpoint: () => this.checkpoint()
         }
         return Object.fromEntries(Object.entries(actions).filter(entry => selector.includes(entry[0] as keyof Actions)))
     }
@@ -43,11 +44,12 @@ export class NoUndoRedo {
                       'create',
                       'delete',
                       'rename',
-                      'restart'
+                      'restart',
+                      'checkpoint'
                   ),
                   wait
               )
-            : this.setActions(this.filterActions('start', 'restart'), wait)
+            : this.setActions(this.filterActions('start', 'restart', 'checkpoint'), wait)
     }
 
     private async start() {
@@ -335,12 +337,13 @@ export class NoUndoRedo {
         await this.read(transaction, path)
     }
 
-    private async restart() {
+    private async restart(onlyCheckpoint = false) {
         // clean cache data
 
-        this.cache = { name: 'fs', children: {} }
+        if (!onlyCheckpoint) this.cache = { name: 'fs', children: {} }
 
-        this.info.push({ class: 'bg-danger', transaction: undefined, description: 'RESTART', object: [] })
+        if (!onlyCheckpoint)
+            this.info.push({ class: 'bg-danger', transaction: undefined, description: 'RESTART', object: [] })
 
         const redone = new Set<string>()
 
@@ -397,15 +400,28 @@ export class NoUndoRedo {
         }
 
         // clear aborted and consolidate transactions
-        this.activeTransactions = new Set()
-        this.consolidatedTransactions = new Set()
-        this.abortedTransactions = new Set()
+        if (!onlyCheckpoint) {
+            this.activeTransactions = new Set()
+            this.consolidatedTransactions = new Set()
+            this.abortedTransactions = new Set()
 
-        // clear journal
-        this.journal = []
+            // clear journal
+            this.journal = []
+        }
 
         await this.setDefaultActions()
     }
 
-    private async checkpoint() {}
+    private async checkpoint() {
+        this.info.push({ transaction: undefined, description: 'running checkpoint', object: [], class: 'bg-light' })
+
+        this.journal.push({
+            transaction: undefined,
+            timestamp: new Date(),
+            operation: 'check',
+            object: [...this.activeTransactions]
+        })
+
+        await this.restart(true)
+    }
 }

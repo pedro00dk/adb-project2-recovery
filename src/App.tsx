@@ -149,12 +149,12 @@ function RecoveryAlgorithms(props: {
 
 function TransactionActions(props: { transaction: string; actions: Actions }) {
     return (
-        <div className='d-flex flex-column shadow-sm m-2 w-100'>
+        <div className='d-flex flex-column shadow-sm flex-wrap m-2 w-100'>
             <h6 className='text-center p-2 mb-1'>Transaction Actions</h6>
             <div className='d-flex mx-2 mb-2'>
                 <button
                     type='button'
-                    className='btn btn-outline-success m-2 w-25'
+                    className='btn btn-outline-success m-2'
                     disabled={!props.actions.start}
                     onClick={props.actions.start}
                 >
@@ -162,7 +162,7 @@ function TransactionActions(props: { transaction: string; actions: Actions }) {
                 </button>
                 <button
                     type='button'
-                    className='btn btn-outline-primary m-2 w-25'
+                    className='btn btn-outline-primary m-2'
                     disabled={!props.actions.commit}
                     onClick={event => props.actions.commit(props.transaction)}
                 >
@@ -170,7 +170,7 @@ function TransactionActions(props: { transaction: string; actions: Actions }) {
                 </button>
                 <button
                     type='button'
-                    className='btn btn-outline-warning m-2 w-25'
+                    className='btn btn-outline-warning m-2'
                     disabled={!props.actions.abort}
                     onClick={event => props.actions.abort(props.transaction)}
                 >
@@ -178,7 +178,15 @@ function TransactionActions(props: { transaction: string; actions: Actions }) {
                 </button>
                 <button
                     type='button'
-                    className='btn btn-outline-danger  m-2 w-25'
+                    className='btn btn-outline-secondary m-2'
+                    disabled={!props.actions.checkpoint}
+                    onClick={event => props.actions.checkpoint()}
+                >
+                    Checkpoint
+                </button>
+                <button
+                    type='button'
+                    className='btn btn-outline-danger m-2'
                     disabled={!props.actions.restart}
                     onClick={() => props.actions.restart()}
                 >

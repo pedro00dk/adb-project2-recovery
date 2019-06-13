@@ -66,11 +66,11 @@ export type Actions = {
     start?: () => void
     commit?: (transaction: string) => void
     abort?: (transaction: string) => void
-
     read?: (transaction: string, path: StringPath) => void
     create?: (transaction: string, path: StringPath, type: 'file' | 'folder') => void
     delete?: (transaction: string, path: StringPath) => void
     rename?: (transaction: string, path: StringPath, name: string) => void
     write?: (transaction: string, path: StringPath, text: string) => void
     restart?: () => void
+    checkpoint?: () => void
 }
