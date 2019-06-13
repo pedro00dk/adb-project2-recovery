@@ -41,7 +41,6 @@ export const nodeSorter = (nodeA: Node, nodeB: Node) =>
 
 export type LogEntry = {
     transaction: string
-    timestamp: Date
     operation: 'start' | 'folder' | 'file' | 'read' | 'write' | 'delete' | 'rename' | 'commit' | 'abort' | 'check'
     object: string[]
     before?: string

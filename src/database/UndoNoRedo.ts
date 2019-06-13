@@ -60,7 +60,7 @@ export class UndoNoRedo {
 
         // add new transaction to active transactions list and journal
         this.activeTransactions.add(transaction)
-        this.journal.push({ transaction, timestamp: new Date(), operation: 'start', object: [] })
+        this.journal.push({ transaction, operation: 'start', object: [] })
 
         await this.setDefaultActions()
     }
@@ -77,7 +77,7 @@ export class UndoNoRedo {
         this.info.push({ class: 'bg-primary', transaction, description: 'end of transaction', object: [] })
 
         // add commit entry to journal, add in consolidate transactions and remove from active transactions
-        this.journal.push({ transaction, timestamp: new Date(), operation: 'commit', object: undefined })
+        this.journal.push({ transaction, operation: 'commit', object: undefined })
         this.consolidatedTransactions.add(transaction)
         await this.setDefaultActions()
         this.activeTransactions.delete(transaction)
@@ -95,12 +95,7 @@ export class UndoNoRedo {
 
         this.info.push({ class: 'bg-danger', transaction, description: 'Abort', object: [] })
 
-        this.journal.push({
-            transaction,
-            timestamp: new Date(),
-            operation: 'abort',
-            object: []
-        })
+        this.journal.push({ transaction, operation: 'abort', object: [] })
 
         await this.restart(transaction)
     }
@@ -158,13 +153,7 @@ export class UndoNoRedo {
 
         // add entry to journal
         if (updateJournal)
-            this.journal.push({
-                transaction,
-                timestamp: new Date(),
-                operation: 'write',
-                object: path,
-                before: cacheNode.content
-            })
+            this.journal.push({ transaction, operation: 'write', object: path, before: cacheNode.content })
 
         // update cache and then disk
         cacheNode.content = text
@@ -204,13 +193,7 @@ export class UndoNoRedo {
 
         this.info.push({ class: '', transaction, description: `creating path ${type}`, object: path, data: name })
 
-        if (updateJournal)
-            this.journal.push({
-                transaction,
-                timestamp: new Date(),
-                operation: type,
-                object: [...path, name]
-            })
+        if (updateJournal) this.journal.push({ transaction, operation: type, object: [...path, name] })
 
         // update cache and then disk
         cacheNode.children[name] = type === 'file' ? { name, content: '' } : { name, children: {} }
@@ -267,7 +250,6 @@ export class UndoNoRedo {
             if (updateJournal)
                 this.journal.push({
                     transaction,
-                    timestamp: new Date(),
                     operation: 'delete',
                     object: path.slice(0, -1),
                     before: `${isFile ? 'file' : 'folder'}/${path.slice(-1).pop()}`
@@ -317,7 +299,6 @@ export class UndoNoRedo {
         if (updateJournal)
             this.journal.push({
                 transaction,
-                timestamp: new Date(),
                 operation: 'rename',
                 object: [...path.slice(0, -1), name],
                 before: previousName
@@ -417,12 +398,7 @@ export class UndoNoRedo {
 
         this.info.push({ transaction: undefined, description: 'running checkpoint', object: [], class: 'bg-light' })
 
-        this.journal.push({
-            transaction: undefined,
-            timestamp: new Date(),
-            operation: 'check',
-            object: [...this.activeTransactions]
-        })
+        this.journal.push({ transaction: undefined, operation: 'check', object: [...this.activeTransactions] })
 
         await this.setDefaultActions()
     }

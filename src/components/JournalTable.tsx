@@ -16,9 +16,8 @@ export function JournalTable(props: { journal: Journal }) {
             <thead>
                 <tr>
                     <th style={{ width: '12%' }}>tid</th>
-                    <th style={{ width: '12%' }}>time</th>
-                    <th style={{ width: '15%' }}>op</th>
-                    <th style={{ width: '31%' }}>object</th>
+                    <th style={{ width: '20%' }}>op</th>
+                    <th style={{ width: '38%' }}>object</th>
                     <th style={{ width: '15%' }}>{'<<'}</th>
                     <th style={{ width: '15%' }}>{'>>'}</th>
                 </tr>
@@ -29,19 +28,12 @@ export function JournalTable(props: { journal: Journal }) {
                         <th className='text-truncate' style={{ width: '12%' }} title={entry.transaction}>
                             {entry.transaction}
                         </th>
-                        <td
-                            className='text-truncate'
-                            style={{ width: '12%' }}
-                            title={`${entry.timestamp.getMinutes()}:${entry.timestamp.getSeconds()}`}
-                        >
-                            {entry.timestamp.getMinutes()}:{entry.timestamp.getSeconds()}
-                        </td>
-                        <td className='text-truncate' style={{ width: '15%' }} title={entry.operation}>
+                        <td className='text-truncate' style={{ width: '20%' }} title={entry.operation}>
                             {entry.operation}
                         </td>
                         <td
                             className='text-truncate'
-                            style={{ width: '31%' }}
+                            style={{ width: '38%' }}
                             title={`${!!entry.object ? entry.object.join('/') : ''}`}
                         >{`${!!entry.object ? entry.object.join('/') : ''}`}</td>
                         <td className='text-truncate' style={{ width: '15%' }} title={entry.before}>

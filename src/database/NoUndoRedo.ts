@@ -60,7 +60,7 @@ export class NoUndoRedo {
 
         // add new transaction to active transactions list and journal
         this.activeTransactions.add(transaction)
-        this.journal.push({ transaction, timestamp: new Date(), operation: 'start', object: [] })
+        this.journal.push({ transaction, operation: 'start', object: [] })
 
         await this.setDefaultActions()
     }
@@ -77,7 +77,7 @@ export class NoUndoRedo {
         this.info.push({ class: 'bg-primary', transaction, description: 'end of transaction', object: [] })
 
         // add commit entry to journal, add in consolidate transactions and remove from active transactions
-        this.journal.push({ transaction, timestamp: new Date(), operation: 'commit', object: [] })
+        this.journal.push({ transaction, operation: 'commit', object: [] })
         this.consolidatedTransactions.add(transaction)
         this.activeTransactions.delete(transaction)
 
@@ -95,12 +95,7 @@ export class NoUndoRedo {
 
         this.info.push({ class: 'bg-danger', transaction, description: 'Abort', object: [] })
 
-        this.journal.push({
-            transaction,
-            timestamp: new Date(),
-            operation: 'abort',
-            object: []
-        })
+        this.journal.push({ transaction, operation: 'abort', object: [] })
 
         this.abortedTransactions.add(transaction)
         this.activeTransactions.delete(transaction)
@@ -188,14 +183,7 @@ export class NoUndoRedo {
         this.info.push({ class: '', transaction, description: 'writing path', object: path, data: text })
 
         // add entry to journal
-        if (updateJournal)
-            this.journal.push({
-                transaction,
-                timestamp: new Date(),
-                operation: 'write',
-                object: path,
-                after: text
-            })
+        if (updateJournal) this.journal.push({ transaction, operation: 'write', object: path, after: text })
 
         // we have to read the path because we cant do any write operations on an out of date path
         await this.read(transaction, path)
@@ -231,14 +219,7 @@ export class NoUndoRedo {
 
         this.info.push({ class: '', transaction, description: `creating path ${type}`, object: path, data: name })
 
-        if (updateJournal)
-            this.journal.push({
-                transaction,
-                timestamp: new Date(),
-                operation: type,
-                object: path,
-                after: name
-            })
+        if (updateJournal) this.journal.push({ transaction, operation: type, object: path, after: name })
 
         // we have to read the path because we cant do any write operations on an out of date path
         await this.read(transaction, path)
@@ -280,13 +261,7 @@ export class NoUndoRedo {
                 }
             }
 
-            if (updateJournal)
-                this.journal.push({
-                    transaction,
-                    timestamp: new Date(),
-                    operation: 'delete',
-                    object: path
-                })
+            if (updateJournal) this.journal.push({ transaction, operation: 'delete', object: path })
 
             // we have to read the path because we cant do any write operations on an out of date path
             await this.read(transaction, path)
@@ -324,14 +299,7 @@ export class NoUndoRedo {
 
         this.info.push({ class: '', transaction, description: 'renaming path', object: path, data: name })
 
-        if (updateJournal)
-            this.journal.push({
-                transaction,
-                timestamp: new Date(),
-                operation: 'rename',
-                object: path,
-                after: name
-            })
+        if (updateJournal) this.journal.push({ transaction, operation: 'rename', object: path, after: name })
 
         // we have to read the path because we cant do any write operations on an out of date path
         await this.read(transaction, path)
@@ -415,12 +383,7 @@ export class NoUndoRedo {
     private async checkpoint() {
         this.info.push({ transaction: undefined, description: 'running checkpoint', object: [], class: 'bg-light' })
 
-        this.journal.push({
-            transaction: undefined,
-            timestamp: new Date(),
-            operation: 'check',
-            object: [...this.activeTransactions]
-        })
+        this.journal.push({ transaction: undefined, operation: 'check', object: [...this.activeTransactions] })
 
         await this.restart(true)
     }
