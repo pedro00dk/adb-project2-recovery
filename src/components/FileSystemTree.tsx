@@ -1,10 +1,21 @@
 import * as React from 'react'
 import { Item, Menu, MenuProvider, Submenu } from 'react-contexify'
-import { Actions, fromNodePath, getPathname, Node, nodeIsFile, NodePath, nodeSorter, StringPath } from '../database/DataTypes'
+import {
+    Actions,
+    fromNodePath,
+    getPathname,
+    Node,
+    nodeIsFile,
+    NodePath,
+    nodeSorter,
+    StringPath
+} from '../database/DataTypes'
 
 import 'react-contexify/dist/ReactContexify.min.css'
 
 export function FileSystemTree(props: { fs: Node; prefix: string; transaction: string; actions: Actions }) {
+    const forceUpdate = React.useState({})[1]
+    const updateOnEven = React.useRef(0)
     const stringPath = fromNodePath([props.fs])
     const pathname = getPathname(stringPath, props.prefix)
 
@@ -53,7 +64,7 @@ function FileSystemNode(props: { path: NodePath; prefix: string; transaction: st
     const pathname = getPathname(stringPath, props.prefix)
 
     return (
-        <li className='text-truncate'>
+        <li className='text-truncate' key={pathname}>
             <i className={`far ${isFile ? 'fa-file-alt' : 'fa-folder'} mr-1`} />
             {!write && !rename ? (
                 <>
